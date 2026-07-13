@@ -41,10 +41,21 @@ const KEY_ALIASES = new Map([
 ]);
 
 class PttKeyListener {
-  constructor({ key, helperPath, onState, onError = () => {} }) {
+  constructor({
+    key,
+    helperPath,
+    uiUrl,
+    iconPath,
+    onState,
+    onExit = () => {},
+    onError = () => {},
+  }) {
     this.key = normalizePttKey(key);
     this.helperPath = helperPath || path.join(__dirname, 'bin', 'LiveKitCompanionNative.exe');
+    this.uiUrl = uiUrl;
+    this.iconPath = iconPath;
     this.onState = onState;
+    this.onExit = onExit;
     this.onError = onError;
     this.child = null;
   }
@@ -56,7 +67,10 @@ class PttKeyListener {
     }
     if (this.child) return;
 
-    const child = spawn(this.helperPath, [this.key], {
+    const args = [this.key];
+    if (this.uiUrl) args.push('--ui-url', this.uiUrl);
+    if (this.iconPath) args.push('--icon', this.iconPath);
+    const child = spawn(this.helperPath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
@@ -64,6 +78,7 @@ class PttKeyListener {
     const parse = createLineParser((line) => {
       if (line === 'DOWN') this.onState(true);
       if (line === 'UP') this.onState(false);
+      if (line === 'EXIT') this.onExit();
     });
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', parse);
@@ -82,6 +97,16 @@ class PttKeyListener {
     this.child = null;
     child?.kill();
   }
+
+  setKey(value) {
+    const nextKey = normalizePttKey(value);
+    if (nextKey === this.key) return this.key;
+    const wasRunning = Boolean(this.child);
+    this.stop();
+    this.key = nextKey;
+    if (wasRunning) this.start();
+    return this.key;
+  }
 }
 
 function createLineParser(onLine) {
@@ -95,7 +120,9 @@ function createLineParser(onLine) {
 }
 
 function normalizePttKey(value) {
-  const raw = String(value || '').trim().toUpperCase();
+  const raw = String(value || '')
+    .trim()
+    .toUpperCase();
   const normalized = KEY_ALIASES.get(raw) || raw;
   if (!SUPPORTED_KEYS.includes(normalized)) {
     throw new Error(`Unsupported PTT key: ${value || '(empty)'}.`);

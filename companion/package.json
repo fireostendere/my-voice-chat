@@ -1,6 +1,6 @@
 {
   "name": "livekit-ptt-companion",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "description": "Local LiveKit companion for global push-to-talk and host-side BitTorrent streaming.",
   "bin": {

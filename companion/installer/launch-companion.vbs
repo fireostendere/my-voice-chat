@@ -22,6 +22,7 @@ InstallDir = FileSystem.GetParentFolderName(WScript.ScriptFullName)
 DataDir = Shell.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\LiveKitCompanion"
 PidFile = DataDir & "\companion.pid"
 LogFile = DataDir & "\companion.log"
+UiUrl = "http://127.0.0.1:7333/"
 
 Set ProcessEnvironment = Shell.Environment("Process")
 ProcessEnvironment("COMPANION_INTERACTIVE") = "1"
@@ -29,9 +30,17 @@ Shell.Run Chr(34) & InstallDir & "\start-companion.cmd" & Chr(34), 0, False
 WScript.Sleep 2500
 
 If IsCompanionRunning(PidFile) Then
-  MsgBox "LiveKit Companion is running in the background." & vbCrLf & vbCrLf & _
-    "Use 'Status and diagnostics' in the Start menu to view its status and log.", _
-    64, "LiveKit Companion"
+  EdgePath = Shell.ExpandEnvironmentStrings("%ProgramFiles(x86)%") & _
+    "\Microsoft\Edge\Application\msedge.exe"
+  If Not FileSystem.FileExists(EdgePath) Then
+    EdgePath = Shell.ExpandEnvironmentStrings("%ProgramFiles%") & _
+      "\Microsoft\Edge\Application\msedge.exe"
+  End If
+  If FileSystem.FileExists(EdgePath) Then
+    Shell.Run Chr(34) & EdgePath & Chr(34) & " --app=" & UiUrl, 1, False
+  Else
+    Shell.Run UiUrl, 1, False
+  End If
 Else
   MsgBox "LiveKit Companion could not start." & vbCrLf & vbCrLf & _
     "Open 'Status and diagnostics' in the Start menu for details." & vbCrLf & _

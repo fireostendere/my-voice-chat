@@ -21,19 +21,28 @@
 const { WebSocketServer } = require('ws');
 const fs = require('node:fs');
 const path = require('node:path');
+const { CompanionUiServer } = require('./companion-ui');
 const { companionDataDir, createFileOriginApprover } = require('./origin-approval');
-const { PttKeyListener, normalizePttKey } = require('./ptt-key-listener');
+const { PttKeyListener, SUPPORTED_KEYS, normalizePttKey } = require('./ptt-key-listener');
+const { RoomRegistry } = require('./room-registry');
 const { TorrentService } = require('./torrent-service');
 
 const PORT = Number(process.env.PTT_PORT) || 7331;
-const PTT_KEY = normalizePttKey(process.env.PTT_KEY || 'F8');
+let pttKey = normalizePttKey(process.env.PTT_KEY || 'F8');
 const TORRENT_PORT = Number(process.env.TORRENT_PORT) || PORT + 1;
+const UI_PORT = Number(process.env.COMPANION_UI_PORT) || PORT + 2;
 const ALLOWED_ORIGINS = (process.env.COMPANION_ORIGINS || process.env.PTT_ORIGINS || '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
 const DATA_DIR = companionDataDir();
 const PID_FILE = path.join(DATA_DIR, 'companion.pid');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.env');
+const UI_URL = `http://127.0.0.1:${UI_PORT}/`;
+const PACKAGED_ICON_PATH = path.join(__dirname, 'ui', 'livekit.ico');
+const ICON_PATH = fs.existsSync(PACKAGED_ICON_PATH)
+  ? PACKAGED_ICON_PATH
+  : path.join(__dirname, '..', 'public', 'favicon.ico');
 
 claimProcess();
 const originApprover = createFileOriginApprover({ configuredOrigins: ALLOWED_ORIGINS });
@@ -55,6 +64,7 @@ const wss = new WebSocketServer({
   },
 });
 const torrentService = new TorrentService({ port: TORRENT_PORT });
+const roomRegistry = new RoomRegistry();
 let talking = false;
 let shuttingDown = false;
 
@@ -70,13 +80,15 @@ function broadcast(state) {
 wss.on('listening', () => {
   console.log(`[companion] WebSocket listening on ws://127.0.0.1:${PORT}`);
   console.log(`[companion] Torrent stream will use http://127.0.0.1:${TORRENT_PORT}`);
-  console.log(`[companion] Talk key: "${PTT_KEY}"  (change with the PTT_KEY env var)`);
+  console.log(`[companion] UI available at ${UI_URL}`);
+  console.log(`[companion] Talk key: "${pttKey}"`);
   console.log('[companion] Hold it to talk. Run `npm run keys` to list supported keys.');
 });
 wss.on('connection', (socket, req) => {
   const origin = req.headers.origin;
   console.log(`[companion] browser connected: ${origin}`);
   torrentService.attachSocket(socket, { enableTorrent: true });
+  roomRegistry.attachSocket(socket);
 });
 wss.on('error', (err) => {
   console.error('[companion] WebSocket server error:', err.message);
@@ -84,14 +96,34 @@ wss.on('error', (err) => {
 });
 
 const keyboard = new PttKeyListener({
-  key: PTT_KEY,
+  key: pttKey,
+  uiUrl: UI_URL,
+  iconPath: ICON_PATH,
   onState: (next) => {
     if (next !== talking) broadcast(next ? 'down' : 'up');
     talking = next;
   },
+  onExit: () => shutdown(0),
   onError: (error) => console.error('[companion] PTT helper:', error.message),
 });
 keyboard.start();
+
+const uiServer = new CompanionUiServer({
+  port: UI_PORT,
+  getPttKey: () => pttKey,
+  setPttKey: (value) => {
+    pttKey = keyboard.setKey(value);
+    fs.writeFileSync(SETTINGS_FILE, `PTT_KEY=${pttKey}\r\n`, 'ascii');
+    return pttKey;
+  },
+  supportedKeys: SUPPORTED_KEYS,
+  roomRegistry,
+  uiDir: path.join(__dirname, 'ui'),
+});
+uiServer.start().catch((error) => {
+  console.error('[companion] UI server error:', error.message);
+  shutdown(1);
+});
 
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
@@ -100,12 +132,18 @@ process.on('exit', releaseProcess);
 async function shutdown(exitCode) {
   if (shuttingDown) return;
   shuttingDown = true;
+  const forceExitTimer = setTimeout(() => process.exit(exitCode), 1500);
+  forceExitTimer.unref();
   console.log('\n[companion] shutting down');
+  roomRegistry.close();
+  await uiServer.close();
   await torrentService.close();
   keyboard.stop();
   for (const client of wss.clients) client.close(1001, 'Companion stopping');
-  wss.close(() => process.exit(exitCode));
-  setTimeout(() => process.exit(exitCode), 1000).unref();
+  wss.close(() => {
+    clearTimeout(forceExitTimer);
+    process.exit(exitCode);
+  });
 }
 
 function claimProcess() {

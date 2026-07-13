@@ -203,6 +203,12 @@ directory, and exposes the selected largest video through a tokenized localhost 
 range stream. Closing the source or its WebSocket destroys the client and deletes the
 temporary directory.
 
+`CompanionRoomBridge` keeps a separate localhost WebSocket open while a room is active
+and registers the room name and local participant identity. The companion control UI
+lists those registrations and sends a validated `torrent-open` command to the selected
+room. The bridge converts the serialized `.torrent` bytes back to `TorrentInput` and
+starts the existing host pipeline; it does not create a second torrent engine.
+
 If no capable companion answers within the detection timeout, the browser dynamically
 loads the WebTorrent browser bundle and its service worker. This fallback never talks
 to Next.js but can only discover WebRTC-compatible WebTorrent peers and web seeds. In
@@ -216,6 +222,11 @@ server does not build or store binaries. A Windows GitHub Actions job packages N
 the companion, its dependencies, shortcuts, and autostart support with Inno Setup. The
 same job builds `LiveKitCompanionNative.exe` from repository C# source with .NET Native
 AOT.
+
+The companion also serves a token-protected control UI on `127.0.0.1:7333`. It accepts
+magnet links and `.torrent` files for active rooms and updates the persisted PTT key.
+The native helper owns the LiveKit tray icon, opens this UI in an app-style Edge window,
+and can request an orderly Node shutdown.
 
 The PTT helper polls only the configured Windows virtual key. It replaces the previous
 third-party global keyboard hook and does not enumerate other keys or collect typed

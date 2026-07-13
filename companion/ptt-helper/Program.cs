@@ -51,14 +51,58 @@ internal static class Program
             return ShowStartupError(args[1]);
         }
 
-        if (args.Length != 1 || !TryResolveVirtualKey(args[0], out var virtualKey))
+        if (args.Length < 1 || !TryResolveVirtualKey(args[0], out var virtualKey))
         {
             Console.Error.WriteLine("Unsupported PTT key.");
             return 2;
         }
 
+        if (!TryReadOption(args, "--ui-url", out var uiUrl) ||
+            !TryReadOption(args, "--icon", out var iconPath))
+        {
+            Console.Error.WriteLine("Invalid companion helper options.");
+            return 2;
+        }
+
+        using var cancellation = new CancellationTokenSource();
+        if (uiUrl is not null)
+        {
+            var pollThread = new Thread(() => PollKey(virtualKey, cancellation.Token))
+            {
+                IsBackground = true,
+                Name = "LiveKit Companion PTT",
+            };
+            pollThread.Start();
+            try
+            {
+                using var trayIcon = new TrayIcon(uiUrl, iconPath, () =>
+                {
+                    Console.WriteLine("EXIT");
+                    Console.Out.Flush();
+                });
+                trayIcon.Run();
+            }
+            catch (Exception error)
+            {
+                Console.Error.WriteLine($"Tray icon unavailable: {error.Message}");
+                pollThread.Join();
+            }
+            finally
+            {
+                cancellation.Cancel();
+                pollThread.Join(250);
+            }
+            return 0;
+        }
+
+        PollKey(virtualKey, cancellation.Token);
+        return 0;
+    }
+
+    private static void PollKey(int virtualKey, CancellationToken cancellationToken)
+    {
         var wasDown = false;
-        while (true)
+        while (!cancellationToken.IsCancellationRequested)
         {
             var isDown = (GetAsyncKeyState(virtualKey) & KeyDownMask) != 0;
             if (isDown != wasDown)
@@ -69,6 +113,24 @@ internal static class Program
             }
             Thread.Sleep(8);
         }
+    }
+
+    private static bool TryReadOption(string[] args, string option, out string? value)
+    {
+        value = null;
+        for (var index = 1; index < args.Length; index += 2)
+        {
+            if (index + 1 >= args.Length) return false;
+            if (args[index] == option)
+            {
+                value = args[index + 1];
+            }
+            else if (args[index] is not "--ui-url" and not "--icon")
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static int PromptForOrigin(string origin)

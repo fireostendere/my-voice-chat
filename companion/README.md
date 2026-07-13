@@ -40,16 +40,20 @@ Start menu and desktop shortcuts, can enable startup with Windows, and starts th
 companion in the background. It does not require a system-wide Node.js installation or
 administrator rights.
 
-The companion has no main window. Open **LiveKit Companion → Status and diagnostics**
-from the Start menu to see its PID and latest startup log. Use **Uninstall LiveKit
-Companion** there or **Windows Settings → Apps → Installed apps** to remove it.
+Opening **LiveKit Companion** from the desktop or Start menu starts the background
+service and opens its local control window. The LiveKit tray icon can reopen that
+window or exit the service. Use **Status and diagnostics** to see its PID and latest
+startup log. Use **Uninstall LiveKit Companion** or **Windows Settings → Apps →
+Installed apps** to remove it.
 
 The first time a deployed voice-chat site connects, Windows displays an approval
 dialog. Verify its origin and choose **Yes**. The companion remembers approved origins
 under `%LOCALAPPDATA%\LiveKitCompanion`.
 
-The Start menu folder includes **Configure PTT key**. It validates and saves a supported
-key, restarts the companion, and keeps `F8` as the default.
+The control window lists active voice-chat rooms. Choose a `.torrent` file or paste a
+magnet link to start it in the selected room. It also validates and saves the global
+PTT key immediately; `F8` remains the default. The legacy **Configure PTT key** Start
+menu shortcut remains available for diagnostics.
 
 ## Setup
 
@@ -89,6 +93,7 @@ will choose it automatically; there is no engine toggle.
 | `PTT_KEY`           | `F8`            | Global key name used as the talk button.                                         |
 | `PTT_PORT`          | `7331`          | Local capability WebSocket port.                                                 |
 | `TORRENT_PORT`      | `PTT_PORT + 1`  | Local HTTP range-stream port used by the host browser.                           |
+| `COMPANION_UI_PORT` | `PTT_PORT + 2`  | Local control-window HTTP port.                                                  |
 | `COMPANION_ORIGINS` | approval dialog | Comma-separated trusted browser origins, for example `https://chat.example.com`. |
 | `PTT_ORIGINS`       | approval dialog | Legacy alias used when `COMPANION_ORIGINS` is unset.                             |
 
@@ -119,6 +124,8 @@ trusted automatically.
 ## Torrent behavior
 
 - Accepts magnet links and `.torrent` files up to 2 MB.
+- Uses standard TCP/UDP BitTorrent discovery and peers; WebRTC seed support is not
+  required when the companion is selected.
 - Automatically selects the largest MP4/M4V/WebM/OGG/MOV/MKV file.
 - Supports HTTP byte ranges, so seeking prioritizes the required torrent pieces.
 - Shows peers, download speed, progress, and the selected engine in the host panel.
@@ -130,7 +137,9 @@ and WebM are the most portable choices; MKV and HEVC support varies by browser a
 
 ## Security
 
-- Both servers bind to `127.0.0.1` and are not reachable from the LAN.
+- All companion servers bind to `127.0.0.1` and are not reachable from the LAN.
+- The control API uses an in-memory random token and same-origin checks. Its window is
+  a localhost web UI, not a remotely hosted page.
 - Torrent stream paths contain a random token.
 - `LiveKitCompanionNative.exe` polls only the configured virtual key. It does not
   install a global keyboard hook, enumerate other keys, collect typed characters, or
@@ -146,6 +155,7 @@ bypass or suppress security products.
 
 ## Autostart
 
-The EXE installer can create a per-user Startup shortcut. For a manual installation,
-create a shortcut that runs `npm start` in this directory and place it in the Windows
-Startup folder (`Win+R`, then `shell:startup`).
+The EXE installer can create a per-user Startup shortcut. Autostart launches the
+service and tray icon without forcing the control window to the foreground. For a
+manual installation, create a shortcut that runs `npm start` in this directory and
+place it in the Windows Startup folder (`Win+R`, then `shell:startup`).
