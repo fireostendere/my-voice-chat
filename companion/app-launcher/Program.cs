@@ -49,7 +49,9 @@ internal static class Program
                 }
                 if (!ownsMutex)
                 {
-                    ShowStartupError("Another LiveKit Companion launch is still in progress.");
+                    ReportStartupError(
+                        "Another LiveKit Companion launch is still in progress.",
+                        openWindow);
                     return 1;
                 }
 
@@ -58,7 +60,9 @@ internal static class Program
                     StartBackend();
                     if (!WaitForUi(TimeSpan.FromSeconds(15)))
                     {
-                        ShowStartupError("The background service did not become ready.");
+                        ReportStartupError(
+                            "The background service did not become ready.",
+                            openWindow);
                         return 1;
                     }
                 }
@@ -73,7 +77,7 @@ internal static class Program
         }
         catch (Exception error)
         {
-            ShowStartupError(error.Message);
+            ReportStartupError(error.Message, openWindow);
             return 1;
         }
     }
@@ -218,10 +222,20 @@ internal static class Program
         }
     }
 
-    private static void ShowStartupError(string reason)
+    private static void ReportStartupError(string reason, bool showDialog)
     {
-        ShowError(
-            $"LiveKit Companion could not start.\n\n{reason}\n\nDiagnostic log:\n{LogFile}");
+        var message =
+            $"LiveKit Companion could not start.\n\n{reason}\n\nDiagnostic log:\n{LogFile}";
+        try
+        {
+            Directory.CreateDirectory(DataDirectory);
+            File.AppendAllText(
+                LogFile,
+                $"{DateTimeOffset.Now:O} launcher: {reason}{Environment.NewLine}");
+        }
+        catch {}
+
+        if (showDialog) ShowError(message);
     }
 
     private static void ShowError(string message)

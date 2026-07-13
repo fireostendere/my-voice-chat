@@ -88,10 +88,25 @@ jobs:
       - name: Smoke test installer, startup, and uninstaller
         shell: pwsh
         run: |
+          function Wait-ProcessOrThrow {
+            param(
+              [System.Diagnostics.Process] $Process,
+              [int] $TimeoutSeconds,
+              [string] $Name
+            )
+            if (-not $Process.WaitForExit($TimeoutSeconds * 1000)) {
+              Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+              throw "$Name timed out after $TimeoutSeconds seconds."
+            }
+            if ($Process.ExitCode -ne 0) {
+              throw "$Name exited with code $($Process.ExitCode)."
+            }
+          }
+
           $installer = (Resolve-Path 'companion/dist/LiveKitCompanionSetup.exe').Path
           $installDir = Join-Path $env:RUNNER_TEMP 'LiveKitCompanion-smoke'
-          $install = Start-Process $installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$installDir" -PassThru -Wait
-          if ($install.ExitCode -ne 0) { throw "Installer exited with code $($install.ExitCode)" }
+          $install = Start-Process $installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$installDir" -PassThru
+          Wait-ProcessOrThrow $install 120 'Installer'
 
           $uninstaller = Join-Path $installDir 'unins000.exe'
           $app = Join-Path $installDir 'LiveKitCompanion.exe'
@@ -108,12 +123,17 @@ jobs:
             throw 'Legacy VBS launcher should not be installed.'
           }
 
-          $start = Start-Process $app -ArgumentList '--startup' -PassThru -Wait
-          if ($start.ExitCode -ne 0) { throw "Companion app exited with code $($start.ExitCode)" }
-          Start-Sleep -Seconds 4
           $dataDir = Join-Path $env:LOCALAPPDATA 'LiveKitCompanion'
           $pidFile = Join-Path $dataDir 'companion.pid'
           $logFile = Join-Path $dataDir 'companion.log'
+          $start = Start-Process $app -ArgumentList '--startup' -PassThru
+          try {
+            Wait-ProcessOrThrow $start 30 'Companion app'
+          } catch {
+            if (Test-Path $logFile) { Get-Content $logFile }
+            throw
+          }
+          Start-Sleep -Seconds 4
           if (-not (Test-Path $pidFile)) {
             if (Test-Path $logFile) { Get-Content $logFile }
             throw "Companion did not create its PID file."
@@ -133,10 +153,10 @@ jobs:
             Where-Object { $_.ExecutablePath -like "$installDir*" }
           if (-not $helper) { throw 'Native PTT and tray helper is not running.' }
 
-          $stop = Start-Process $app -ArgumentList '--stop' -PassThru -Wait
-          if ($stop.ExitCode -ne 0) { throw "Companion stop exited with code $($stop.ExitCode)" }
-          $uninstall = Start-Process $uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru -Wait
-          if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited with code $($uninstall.ExitCode)" }
+          $stop = Start-Process $app -ArgumentList '--stop' -PassThru
+          Wait-ProcessOrThrow $stop 30 'Companion stop'
+          $uninstall = Start-Process $uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru
+          Wait-ProcessOrThrow $uninstall 120 'Uninstaller'
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
