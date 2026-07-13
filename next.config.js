@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: false,
   productionBrowserSourceMaps: true,
+  outputFileTracingRoot: __dirname,
   images: {
     formats: ['image/webp'],
   },
