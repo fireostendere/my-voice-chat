@@ -1,10 +1,14 @@
-LiveKit Companion runs in the background and does not open a main window.
+LiveKit Companion runs in the background and places a LiveKit icon in the system tray.
 
 Use the LiveKit Companion shortcuts in the Start menu to:
 
+* open the companion window and send a magnet or .torrent file to an active room;
+* change the global push-to-talk key;
 * check whether it is running and view the latest startup log;
-* configure the push-to-talk key;
 * stop the background process;
 * uninstall the application.
+
+Double-click the tray icon to reopen the companion window. Right-click it to open or
+exit the companion.
 
 You can also uninstall it from Windows Settings > Apps > Installed apps > LiveKit Companion.

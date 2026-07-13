@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createLineParser, normalizePttKey } from './ptt-key-listener.js';
+import { PttKeyListener, createLineParser, normalizePttKey } from './ptt-key-listener.js';
 
 describe('normalizePttKey', () => {
   it('normalizes supported keys and aliases', () => {
@@ -21,5 +21,18 @@ describe('createLineParser', () => {
     parse('WN\r\nup\n');
 
     expect(onLine.mock.calls).toEqual([['DOWN'], ['UP']]);
+  });
+});
+
+describe('PttKeyListener', () => {
+  it('restarts the helper when the configured key changes', () => {
+    const listener = new PttKeyListener({ key: 'F8', onState: vi.fn() });
+    const kill = vi.fn();
+    listener.child = { kill };
+    listener.start = vi.fn();
+
+    expect(listener.setKey('f9')).toBe('F9');
+    expect(kill).toHaveBeenCalledOnce();
+    expect(listener.start).toHaveBeenCalledOnce();
   });
 });

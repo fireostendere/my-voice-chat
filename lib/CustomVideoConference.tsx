@@ -26,6 +26,7 @@ import { StreamHostController } from './watchTogether/StreamHostController';
 import { CustomChat } from './watchTogether/CustomChat';
 import { CinemaPanel } from './watchTogether/CinemaPanel';
 import { CompanionDownloadLink } from './CompanionDownloadLink';
+import { CompanionRoomBridge } from './watchTogether/CompanionRoomBridge';
 
 export interface CustomVideoConferenceProps extends React.HTMLAttributes<HTMLDivElement> {
   chatMessageFormatter?: MessageFormatter;
@@ -159,6 +160,7 @@ function CustomVideoConferenceInner({
           </div>
         )}
       </LayoutContextProvider>
+      <CompanionRoomBridge />
       <StreamHostController />
       <RoomAudioRenderer />
       <ConnectionStateToast />

@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - 'companion/**'
+      - 'public/favicon.ico'
       - '.github/workflows/companion-release.yaml'
   push:
     branches: [main]
     paths:
       - 'companion/**'
+      - 'public/favicon.ico'
       - '.github/workflows/companion-release.yaml'
   workflow_dispatch:
 
@@ -74,8 +76,10 @@ jobs:
           $uninstaller = Join-Path $installDir 'unins000.exe'
           $startScript = Join-Path $installDir 'start-companion.cmd'
           $stopScript = Join-Path $installDir 'stop-companion.cmd'
+          $iconFile = Join-Path $installDir 'LiveKitCompanion.ico'
           if (-not (Test-Path $uninstaller)) { throw "Uninstaller is missing: $uninstaller" }
           if (-not (Test-Path $startScript)) { throw "Start script is missing: $startScript" }
+          if (-not (Test-Path $iconFile)) { throw "LiveKit icon is missing: $iconFile" }
 
           Start-Process 'cmd.exe' -ArgumentList '/d', '/c', "`"$startScript`"" -WindowStyle Hidden
           Start-Sleep -Seconds 4
@@ -91,6 +95,13 @@ jobs:
             if (Test-Path $logFile) { Get-Content $logFile }
             throw "Companion process $companionPid is not running."
           }
+          $ui = Invoke-WebRequest 'http://127.0.0.1:7333/' -UseBasicParsing
+          if ($ui.StatusCode -ne 200 -or $ui.Content -notmatch '<title>LiveKit Companion</title>') {
+            throw 'Companion UI did not start correctly.'
+          }
+          $helper = Get-CimInstance Win32_Process -Filter "Name = 'LiveKitCompanionNative.exe'" |
+            Where-Object { $_.ExecutablePath -like "$installDir*" }
+          if (-not $helper) { throw 'Native PTT and tray helper is not running.' }
 
           & 'cmd.exe' '/d' '/c' "`"$stopScript`""
           $uninstall = Start-Process $uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru -Wait

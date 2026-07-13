@@ -13,6 +13,10 @@ describe('companion installer lifecycle', () => {
     expect(manifest).toContain('Uninstallable=yes');
     expect(manifest).toContain('Status and diagnostics');
     expect(manifest).toContain('Uninstall {#AppName}');
+    expect(manifest).toContain('SetupIconFile=..\\..\\public\\favicon.ico');
+    expect(manifest).toContain('companion-ui.js');
+    expect(manifest).toContain('room-registry.js');
+    expect(manifest).toContain('launch-companion.vbs');
   });
 
   it('logs startup failures and reports them to the user', () => {
@@ -22,7 +26,8 @@ describe('companion installer lifecycle', () => {
     expect(startScript).toContain('companion.log');
     expect(startScript).toContain('--startup-error');
     expect(startScript).toContain('Companion exited with code');
-    expect(launcher).toContain('is running in the background');
+    expect(launcher).toContain('--app=');
+    expect(launcher).toContain('127.0.0.1:7333');
     expect(launcher).toContain('could not start');
   });
 });

@@ -10,5 +10,6 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <StripSymbols>true</StripSymbols>
     <OptimizationPreference>Size</OptimizationPreference>
+    <ApplicationIcon>..\..\public\favicon.ico</ApplicationIcon>
   </PropertyGroup>
 </Project>

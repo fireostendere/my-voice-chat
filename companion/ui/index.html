@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="companion-token" content="__COMPANION_TOKEN__" />
+    <meta name="theme-color" content="#11100f" />
+    <title>LiveKit Companion</title>
+    <link rel="icon" href="/livekit.ico" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+    <main class="shell">
+      <header class="masthead">
+        <div class="brand-mark"><img src="/livekit.ico" alt="" /></div>
+        <div class="brand-copy">
+          <span class="eyebrow">LOCAL MEDIA BRIDGE</span>
+          <h1>LiveKit <em>Companion</em></h1>
+        </div>
+        <div class="service-state" id="service-state">
+          <span></span>
+          <strong>ONLINE</strong>
+          <small>127.0.0.1</small>
+        </div>
+      </header>
+
+      <section class="room-strip">
+        <div>
+          <span class="section-index">01</span>
+          <div>
+            <span class="eyebrow">VOICE CHAT LINK</span>
+            <h2>Active room</h2>
+          </div>
+        </div>
+        <label class="select-wrap" for="room-select">
+          <select id="room-select" aria-label="Active voice-chat room"></select>
+          <span aria-hidden="true">⌄</span>
+        </label>
+      </section>
+
+      <div class="workspace">
+        <section class="panel torrent-panel">
+          <div class="panel-heading">
+            <span class="section-index">02</span>
+            <div>
+              <span class="eyebrow">STANDARD BITTORRENT</span>
+              <h2>Play in room</h2>
+            </div>
+          </div>
+
+          <button type="button" class="drop-zone" id="drop-zone">
+            <span class="drop-icon">＋</span>
+            <strong id="file-label">Choose a .torrent file</strong>
+            <small>or drop it here · 2 MB maximum</small>
+          </button>
+          <input id="torrent-file" type="file" accept=".torrent,application/x-bittorrent" hidden />
+
+          <div class="divider"><span>OR USE A MAGNET LINK</span></div>
+          <label class="field" for="magnet-input">
+            <span>Magnet</span>
+            <input
+              id="magnet-input"
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="magnet:?xt=urn:btih:…"
+            />
+          </label>
+
+          <button type="button" class="primary-action" id="play-button" disabled>
+            <span>Send to active room</span>
+            <b aria-hidden="true">▶</b>
+          </button>
+
+          <p class="privacy-note">
+            The torrent is downloaded by this device through standard BitTorrent peers. Nothing is
+            uploaded to the voice-chat server.
+          </p>
+        </section>
+
+        <aside class="panel ptt-panel">
+          <div class="panel-heading">
+            <span class="section-index">03</span>
+            <div>
+              <span class="eyebrow">GLOBAL PUSH-TO-TALK</span>
+              <h2>Talk key</h2>
+            </div>
+          </div>
+
+          <div class="key-display" id="key-display">F8</div>
+          <label class="field compact" for="ptt-key-select">
+            <span>Configured key</span>
+            <select id="ptt-key-select"></select>
+          </label>
+          <button type="button" class="secondary-action" id="save-key-button">Apply key</button>
+          <p class="key-note">The helper observes only this key and emits press/release state.</p>
+
+          <div class="room-facts">
+            <div>
+              <span>ROOMS</span>
+              <strong id="room-count">0</strong>
+            </div>
+            <div>
+              <span>ENGINE</span>
+              <strong>TCP / UDP</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <footer>
+        <span id="footer-status">Waiting for a voice-chat room…</span>
+        <button type="button" id="refresh-button">Refresh</button>
+      </footer>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

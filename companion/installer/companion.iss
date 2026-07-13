@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.2.1"
+  #define AppVersion "0.3.0"
 #endif
 
 #define AppName "LiveKit Companion"
@@ -32,7 +32,8 @@ InfoAfterFile=after-install.txt
 CreateUninstallRegKey=yes
 Uninstallable=yes
 UninstallDisplayName={#AppName}
-UninstallDisplayIcon={uninstallexe}
+UninstallDisplayIcon={app}\LiveKitCompanion.ico
+SetupIconFile=..\..\public\favicon.ico
 VersionInfoVersion={#AppVersion}
 VersionInfoCompany={#AppPublisher}
 VersionInfoDescription=Local companion for LiveKit voice chat
@@ -54,8 +55,15 @@ Source: "..\index.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\origin-approval.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\origin-core.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\ptt-key-listener.js"; DestDir: "{app}\app"; Flags: ignoreversion
+Source: "..\companion-ui.js"; DestDir: "{app}\app"; Flags: ignoreversion
+Source: "..\room-registry.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\torrent-core.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\torrent-service.js"; DestDir: "{app}\app"; Flags: ignoreversion
+Source: "..\ui\index.html"; DestDir: "{app}\app\ui"; Flags: ignoreversion
+Source: "..\ui\styles.css"; DestDir: "{app}\app\ui"; Flags: ignoreversion
+Source: "..\ui\app.js"; DestDir: "{app}\app\ui"; Flags: ignoreversion
+Source: "..\..\public\favicon.ico"; DestDir: "{app}\app\ui"; DestName: "livekit.ico"; Flags: ignoreversion
+Source: "..\..\public\favicon.ico"; DestDir: "{app}"; DestName: "LiveKitCompanion.ico"; Flags: ignoreversion
 Source: "..\package.json"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\node_modules\*"; DestDir: "{app}\app\node_modules"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "start-companion.cmd"; DestDir: "{app}"; Flags: ignoreversion
@@ -68,17 +76,17 @@ Source: "configure-key.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "configure-key.js"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\launch-companion.vbs"""; WorkingDir: "{app}"
-Name: "{group}\Configure PTT key"; Filename: "{app}\configure-key.cmd"; WorkingDir: "{app}"
-Name: "{group}\Status and diagnostics"; Filename: "{app}\status-companion.cmd"; WorkingDir: "{app}"
-Name: "{group}\Stop companion"; Filename: "{app}\stop-companion.cmd"; WorkingDir: "{app}"
-Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
-Name: "{userprograms}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\launch-companion.vbs"""; WorkingDir: "{app}"; Tasks: desktopicon
-Name: "{userstartup}\{#AppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\start-companion.vbs"""; WorkingDir: "{app}"; Tasks: startup
+Name: "{group}\{#AppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\launch-companion.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\LiveKitCompanion.ico"
+Name: "{group}\Configure PTT key"; Filename: "{app}\configure-key.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\LiveKitCompanion.ico"
+Name: "{group}\Status and diagnostics"; Filename: "{app}\status-companion.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\LiveKitCompanion.ico"
+Name: "{group}\Stop companion"; Filename: "{app}\stop-companion.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\LiveKitCompanion.ico"
+Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"; IconFilename: "{app}\LiveKitCompanion.ico"
+Name: "{userprograms}\Uninstall {#AppName}"; Filename: "{uninstallexe}"; IconFilename: "{app}\LiveKitCompanion.ico"
+Name: "{autodesktop}\{#AppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\launch-companion.vbs"""; WorkingDir: "{app}"; Tasks: desktopicon; IconFilename: "{app}\LiveKitCompanion.ico"
+Name: "{userstartup}\{#AppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\start-companion.vbs"""; WorkingDir: "{app}"; Tasks: startup; IconFilename: "{app}\LiveKitCompanion.ico"
 
 [Run]
-Filename: "{sys}\wscript.exe"; Parameters: """{app}\start-companion.vbs"""; Description: "Start {#AppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{sys}\wscript.exe"; Parameters: """{app}\launch-companion.vbs"""; Description: "Open {#AppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "{app}\stop-companion.cmd"; RunOnceId: "StopCompanion"; Flags: runhidden waituntilterminated skipifdoesntexist
