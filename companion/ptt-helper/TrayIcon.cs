@@ -26,7 +26,7 @@ internal sealed class TrayIcon : IDisposable
     private const uint ExitCommand = 2;
 
     private static TrayIcon? active;
-    private static readonly WindowProcedure WindowProcedureCallback = WindowProcedure;
+    private static readonly WindowProcedureDelegate WindowProcedureCallback = WindowProcedure;
 
     private readonly string uiUrl;
     private readonly Action onExit;
