@@ -24,8 +24,8 @@ socket disconnects. LiveKit receives only the encoded real-time media stream.
 
 ## Requirements
 
-- Node.js 18 or newer.
-- Windows for the global keyboard hook.
+- Windows 10 or newer for the EXE installer and global keyboard hook.
+- Node.js 18 or newer only for a manual/development installation.
 - Chrome or Edge is recommended for localhost media capture.
 
 The torrent service itself is Node-based, but the current companion also initializes a
@@ -34,13 +34,19 @@ Windows keyboard hook, so other operating systems are not supported yet.
 ## One-click Windows install
 
 Use **Download companion** on the voice-chat home page or in **Кинотеатр → Торрент**,
-then run `livekit-companion-setup.cmd`. The installer downloads a portable Node.js LTS
-runtime, installs to `%LOCALAPPDATA%\LiveKitCompanion`, trusts the voice-chat origin it
-was downloaded from, creates a desktop shortcut, and starts the companion. It does not
-require a system-wide Node.js installation.
+then run `LiveKitCompanionSetup.exe`. The installer already contains Node.js and all
+dependencies, installs per-user to `%LOCALAPPDATA%\Programs\LiveKitCompanion`, creates
+Start menu and desktop shortcuts, can enable startup with Windows, and starts the
+companion in the background. It does not require a system-wide Node.js installation or
+administrator rights.
 
-The generated folder also contains `learn-key.cmd`. Run it to discover a different key
-name, then edit `PTT_KEY` in `start-companion.cmd`; the default is `F8`.
+The first time a deployed voice-chat site connects, Windows displays an approval
+dialog. Verify its origin and choose **Yes**. The companion remembers approved origins
+under `%LOCALAPPDATA%\LiveKitCompanion`.
+
+The Start menu folder includes **Настроить клавишу рации**. Use it to discover a
+different key name, then edit `PTT_KEY` in the installed `start-companion.cmd`; the
+default is `F8`.
 
 ## Setup
 
@@ -74,13 +80,13 @@ will choose it automatically; there is no engine toggle.
 
 ## Ports and configuration
 
-| Variable            | Default           | Purpose                                                                          |
-| ------------------- | ----------------- | -------------------------------------------------------------------------------- |
-| `PTT_KEY`           | `F8`              | Global key name used as the talk button.                                         |
-| `PTT_PORT`          | `7331`            | Local capability WebSocket port.                                                 |
-| `TORRENT_PORT`      | `PTT_PORT + 1`    | Local HTTP range-stream port used by the host browser.                           |
-| `COMPANION_ORIGINS` | torrent: loopback | Comma-separated trusted browser origins, for example `https://chat.example.com`. |
-| `PTT_ORIGINS`       | torrent: loopback | Legacy alias used when `COMPANION_ORIGINS` is unset.                             |
+| Variable            | Default         | Purpose                                                                          |
+| ------------------- | --------------- | -------------------------------------------------------------------------------- |
+| `PTT_KEY`           | `F8`            | Global key name used as the talk button.                                         |
+| `PTT_PORT`          | `7331`          | Local capability WebSocket port.                                                 |
+| `TORRENT_PORT`      | `PTT_PORT + 1`  | Local HTTP range-stream port used by the host browser.                           |
+| `COMPANION_ORIGINS` | approval dialog | Comma-separated trusted browser origins, for example `https://chat.example.com`. |
+| `PTT_ORIGINS`       | approval dialog | Legacy alias used when `COMPANION_ORIGINS` is unset.                             |
 
 If the WebSocket port changes, configure the web app before building:
 
@@ -95,16 +101,16 @@ NEXT_PUBLIC_COMPANION_WS_URL=ws://127.0.0.1:7331
 NEXT_PUBLIC_PTT_WS_URL=
 ```
 
-For a web app opened from a deployed domain, trust its exact origin before starting
-the companion:
+For a managed installation, an exact allowlist disables interactive approval:
 
 ```powershell
 $env:COMPANION_ORIGINS="https://chat.example.com"; npm start
 ```
 
-Without an explicit allowlist, remote origins can still use the legacy PTT relay but
-the companion does not advertise or accept torrent commands from them. Local
-`localhost`, `127.0.0.1`, and `[::1]` development origins are trusted automatically.
+Without an explicit allowlist, each remote origin requires one-time approval through a
+Windows dialog. Approved sites are stored locally and receive both PTT and torrent
+capabilities. Local `localhost`, `127.0.0.1`, and `[::1]` development origins are
+trusted automatically.
 
 ## Torrent behavior
 
@@ -122,13 +128,13 @@ and WebM are the most portable choices; MKV and HEVC support varies by browser a
 
 - Both servers bind to `127.0.0.1` and are not reachable from the LAN.
 - Torrent stream paths contain a random token.
-- Torrent commands are enabled by default only for loopback web origins. Set an exact
-  `COMPANION_ORIGINS` allowlist when the app is hosted on another domain.
-- The legacy PTT relay still accepts connections from other origins when no allowlist
-  is configured. Set `COMPANION_ORIGINS` to restrict the entire WebSocket.
+- A remote origin gets no WebSocket access until the user approves it. Approval covers
+  both the PTT relay and torrent commands and is persisted per Windows user.
+- An explicit `COMPANION_ORIGINS` allowlist is authoritative and disables prompts.
 - Use torrents only for content you are authorized to download and share.
 
 ## Autostart
 
-Create a shortcut that runs `npm start` in this directory and place it in the Windows
+The EXE installer can create a per-user Startup shortcut. For a manual installation,
+create a shortcut that runs `npm start` in this directory and place it in the Windows
 Startup folder (`Win+R`, then `shell:startup`).

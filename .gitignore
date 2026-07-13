@@ -17,6 +17,8 @@
 
 # production
 /build
+/companion/dist/
+/companion/installer/build/
 
 # misc
 .DS_Store

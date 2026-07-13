@@ -10,8 +10,8 @@ the structure below reflects this repository's code.
 The app is a **Next.js 15 (App Router)** front end. It does not own any media
 infrastructure — all audio/video routing is done by a **LiveKit server** (LiveKit
 Cloud or self-hosted). The Next.js server side is intentionally tiny: four Route
-Handlers that mint a participant access token, start/stop recording, and generate the
-companion installer. Everything else is a browser client that talks WebRTC directly
+Handlers that mint a participant access token, start/stop recording, and redirect to
+the companion installer. Everything else is a browser client that talks WebRTC directly
 to LiveKit.
 
 ```
@@ -51,7 +51,7 @@ to LiveKit.
 | `app/api/connection-details/route.ts`      | server | `GET` → mints a short-lived participant JWT for `{roomName, participantName}`, optionally region-routed.                                                   |
 | `app/api/record/start/route.ts`            | server | `GET` → starts a Room Composite Egress to S3 (speaker layout, mp4).                                                                                        |
 | `app/api/record/stop/route.ts`             | server | `GET` → stops all active egresses for the room.                                                                                                            |
-| `app/api/companion/download/route.ts`      | server | `GET` → generates a Windows companion installer bound to the request's trusted public origin.                                                              |
+| `app/api/companion/download/route.ts`      | server | `GET` → redirects to the Windows companion EXE release or a configured HTTPS mirror.                                                                       |
 
 ## `lib/` modules
 
@@ -210,11 +210,14 @@ both modes viewers do not join the swarm: LiveKit receives and forwards only the
 captured encoded media tracks.
 
 The home page and torrent source panel link to `/api/companion/download`. The route
-uses the public request/reverse-proxy origin to generate a `.cmd` installer that places
-the companion and a portable Node.js LTS runtime under `%LOCALAPPDATA%`, creates a
-desktop launcher, and configures `COMPANION_ORIGINS` for that voice-chat deployment.
-It downloads source and runtime directly to the user's PC; the Next.js server does not
-build or store a per-user binary.
+redirects to `LiveKitCompanionSetup.exe` in a rolling GitHub Release, so the Next.js
+server does not build or store binaries. A Windows GitHub Actions job packages Node.js,
+the companion, its dependencies, shortcuts, and autostart support with Inno Setup.
+
+On first contact from a remote browser origin, the companion displays a native Windows
+approval dialog. Approved origins are persisted per user and receive both PTT and
+torrent capabilities. An explicit `COMPANION_ORIGINS` environment allowlist remains
+authoritative for managed installations.
 
 This requires a browser with `HTMLMediaElement.captureStream()` and a file codec that
 the browser can decode. Direct/HLS sources must also satisfy the remote origin's CORS
@@ -230,5 +233,7 @@ credentialless iframe support under COEP.
 - **Vitest** for unit tests.
 - **Renovate** keeps dependencies current; LiveKit packages are grouped and automerged.
 - **CI** (`.github/workflows/test.yaml`): lint + format check + tests on push/PR.
+- **Companion release** (`.github/workflows/companion-release.yaml`): builds the Windows
+  EXE on companion changes and updates the `companion-latest` GitHub Release from `main`.
 - **Deploy** (`.github/workflows/sync-to-production.yaml`): manual `workflow_dispatch`
   syncs `main` to a `sandbox-production` branch via the LiveKit sandbox deploy action.

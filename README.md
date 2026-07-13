@@ -157,9 +157,8 @@ CI runs `lint`, `format:check`, and `test` on every push and pull request.
 | `NEXT_PUBLIC_COMPANION_WS_URL`                                 | Local companion URL for PTT and standard BitTorrent peers.                                |
 | `NEXT_PUBLIC_PTT_WS_URL`                                       | Push-to-talk companion URL (default `ws://127.0.0.1:7331`; empty disables it).            |
 
-The companion download endpoint also accepts the server-only `COMPANION_PUBLIC_ORIGIN`
-override for unusual reverse proxies and `COMPANION_ARCHIVE_URL` for a custom HTTPS
-source archive.
+The companion download endpoint accepts the server-only `COMPANION_EXE_URL` override
+for a custom HTTPS mirror of `LiveKitCompanionSetup.exe`.
 
 ## Configuring a room via URL
 
@@ -217,13 +216,15 @@ the companion when ordinary public magnet links must work. Torrent playback stil
 depends on the browser being able to decode the selected (largest) video file.
 
 The home page and the room's torrent tab provide a **Download companion** button. It
-generates a Windows installer tied to the current site's origin, downloads a portable
-Node.js LTS runtime, installs under `%LOCALAPPDATA%\LiveKitCompanion`, and creates a
-desktop shortcut. A separate global Node.js installation is not required.
+redirects to a Windows EXE installer from the rolling `companion-latest` GitHub
+release. The installer contains Node.js and all dependencies, installs without admin
+rights, creates shortcuts, and can enable startup with Windows. A separate global
+Node.js installation is not required.
 
-When the web app is hosted outside localhost, set its exact origin in
-`COMPANION_ORIGINS` before starting the companion. Otherwise torrent capability is
-intentionally withheld and the cinema uses browser WebTorrent.
+On the first connection from a remote voice-chat origin, Windows asks the user to
+approve that site. The decision is stored locally and gates both PTT and torrent
+commands. Managed manual installations can still set an exact `COMPANION_ORIGINS`
+allowlist to disable interactive approval.
 
 ## Deployment
 

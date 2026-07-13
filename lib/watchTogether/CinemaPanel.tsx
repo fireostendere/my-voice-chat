@@ -303,7 +303,7 @@ export function CinemaPanel() {
                 <div className="lk-cinema-companion-download">
                   <div>
                     <strong>Нет companion?</strong>
-                    <span>Установщик сам добавит portable Node и настроит этот войсчат.</span>
+                    <span>Обычный EXE-установщик уже включает Node.js и все зависимости.</span>
                   </div>
                   <CompanionDownloadLink compact />
                 </div>
