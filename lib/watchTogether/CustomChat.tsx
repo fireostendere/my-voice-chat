@@ -6,8 +6,6 @@ import {
   useMaybeLayoutContext,
   type ChatProps,
 } from '@livekit/components-react';
-import { useWatchTogether } from './WatchTogetherContext';
-import { parseVideoUrl } from './parseVideoUrl';
 
 export function CustomChat({
   messageFormatter,
@@ -19,7 +17,6 @@ export function CustomChat({
   const layoutContext = useMaybeLayoutContext();
   const ulRef = React.useRef<HTMLUListElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const lastReadTimestamp = React.useRef(0);
 
   const chatOptions = React.useMemo(
@@ -27,7 +24,6 @@ export function CustomChat({
     [messageDecoder, messageEncoder, channelTopic],
   );
   const { chatMessages, send, isSending } = useChat(chatOptions);
-  const { embed, startEmbed, startStream } = useWatchTogether();
 
   React.useEffect(() => {
     if (ulRef.current) ulRef.current.scrollTo({ top: ulRef.current.scrollHeight });
@@ -48,38 +44,12 @@ export function CustomChat({
     }
   }, [chatMessages, layoutContext]);
 
-  const handleVideoCommand = (arg: string) => {
-    if (embed.active && !embed.isHost) {
-      alert('Сейчас просмотром управляет другой участник. Дождитесь завершения показа.');
-      return;
-    }
-    const trimmed = arg.trim();
-    if (!trimmed) {
-      fileInputRef.current?.click();
-      return;
-    }
-    const parsed = parseVideoUrl(trimmed);
-    if (!parsed) {
-      alert(`Unrecognized URL: ${trimmed}`);
-      return;
-    }
-    if (parsed.kind === 'youtube') startEmbed('youtube', parsed.videoId);
-    else startEmbed('url', parsed.url);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const input = inputRef.current;
     if (!input) return;
     const text = input.value.trim();
     if (!text) return;
-
-    if (text === '/video' || text.startsWith('/video ')) {
-      handleVideoCommand(text.slice('/video'.length));
-      input.value = '';
-      input.focus();
-      return;
-    }
 
     try {
       await send(text);
@@ -89,13 +59,6 @@ export function CustomChat({
     }
     input.value = '';
     input.focus();
-  };
-
-  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    startStream(file);
   };
 
   return (
@@ -137,7 +100,7 @@ export function CustomChat({
           className="lk-form-control lk-chat-form-input"
           disabled={isSending}
           type="text"
-          placeholder="Сообщение · /video <ссылка>"
+          placeholder="Сообщение"
           onInput={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
           onKeyUp={(e) => e.stopPropagation()}
@@ -146,13 +109,6 @@ export function CustomChat({
           Send
         </button>
       </form>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="video/*"
-        style={{ display: 'none' }}
-        onChange={handleFileSelected}
-      />
     </div>
   );
 }

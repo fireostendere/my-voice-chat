@@ -80,12 +80,13 @@ Two ways to join a room, each with its own entry route and client component:
 
 Server-only (never exposed to the browser):
 
-| Var                                                                       | Required           | Purpose                                             |
-| ------------------------------------------------------------------------- | ------------------ | --------------------------------------------------- |
-| `LIVEKIT_API_KEY`                                                         | yes                | LiveKit API key, used to sign tokens / call Egress. |
-| `LIVEKIT_API_SECRET`                                                      | yes                | LiveKit API secret.                                 |
-| `LIVEKIT_URL`                                                             | yes                | LiveKit server URL (`wss://…livekit.cloud`).        |
-| `S3_KEY_ID` / `S3_KEY_SECRET` / `S3_ENDPOINT` / `S3_BUCKET` / `S3_REGION` | only for recording | Destination bucket for Egress recordings.           |
+| Var                                                                       | Required           | Purpose                                                |
+| ------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------ |
+| `LIVEKIT_API_KEY`                                                         | yes                | LiveKit API key, used to sign tokens / call Egress.    |
+| `LIVEKIT_API_SECRET`                                                      | yes                | LiveKit API secret.                                    |
+| `LIVEKIT_URL`                                                             | yes                | LiveKit server URL (`wss://…livekit.cloud`).           |
+| `S3_KEY_ID` / `S3_KEY_SECRET` / `S3_ENDPOINT` / `S3_BUCKET` / `S3_REGION` | only for recording | Destination bucket for Egress recordings.              |
+| `COMPANION_EXE_URL`                                                       | GitHub release     | Optional HTTPS mirror for `LiveKitCompanionSetup.exe`. |
 
 Public (`NEXT_PUBLIC_*`, shipped to the browser):
 

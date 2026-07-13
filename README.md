@@ -157,6 +157,9 @@ CI runs `lint`, `format:check`, and `test` on every push and pull request.
 | `NEXT_PUBLIC_COMPANION_WS_URL`                                 | Local companion URL for PTT and standard BitTorrent peers.                                |
 | `NEXT_PUBLIC_PTT_WS_URL`                                       | Push-to-talk companion URL (default `ws://127.0.0.1:7331`; empty disables it).            |
 
+The companion download endpoint accepts the server-only `COMPANION_EXE_URL` override
+for a custom HTTPS mirror of `LiveKitCompanionSetup.exe`.
+
 ## Configuring a room via URL
 
 A managed room URL is `/rooms/<roomName>` and accepts:
@@ -212,9 +215,16 @@ Browser WebTorrent can only reach WebRTC-capable peers and web seeds. Install an
 the companion when ordinary public magnet links must work. Torrent playback still
 depends on the browser being able to decode the selected (largest) video file.
 
-When the web app is hosted outside localhost, set its exact origin in
-`COMPANION_ORIGINS` before starting the companion. Otherwise torrent capability is
-intentionally withheld and the cinema uses browser WebTorrent.
+The home page and the room's torrent tab provide a **Download companion** button. It
+redirects to a Windows EXE installer from the rolling `companion-latest` GitHub
+release. The installer contains Node.js and all dependencies, installs without admin
+rights, creates shortcuts, and can enable startup with Windows. A separate global
+Node.js installation is not required.
+
+On the first connection from a remote voice-chat origin, Windows asks the user to
+approve that site. The decision is stored locally and gates both PTT and torrent
+commands. Managed manual installations can still set an exact `COMPANION_ORIGINS`
+allowlist to disable interactive approval.
 
 ## Deployment
 

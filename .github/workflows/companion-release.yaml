@@ -1,0 +1,85 @@
+name: Build companion installer
+
+on:
+  pull_request:
+    paths:
+      - 'companion/**'
+      - '.github/workflows/companion-release.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'companion/**'
+      - '.github/workflows/companion-release.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: companion/package-lock.json
+
+      - name: Install companion dependencies
+        working-directory: companion
+        run: npm ci --omit=dev --no-audit --no-fund
+
+      - name: Prepare portable runtime
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force companion/installer/build | Out-Null
+          $node = (Get-Command node).Source
+          Copy-Item $node companion/installer/build/node.exe
+          Copy-Item (Join-Path (Split-Path $node) 'LICENSE') companion/installer/build/LICENSE-node.txt
+          $keyServer = 'companion/node_modules/node-global-key-listener/bin/WinKeyServer.exe'
+          if (-not (Test-Path $keyServer)) {
+            throw "Windows key server is missing: $keyServer"
+          }
+
+      - name: Compile EXE installer
+        shell: pwsh
+        run: |
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $compiler)) {
+            choco install innosetup --no-progress -y
+          }
+          $version = node -p "require('./companion/package.json').version"
+          & $compiler "/DAppVersion=$version" companion/installer/companion.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveKitCompanionSetup
+          path: companion/dist/LiveKitCompanionSetup.exe
+          if-no-files-found: error
+
+
+  publish-release:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: windows-installer
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: LiveKitCompanionSetup
+
+      - name: Publish rolling GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view companion-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create companion-latest --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "LiveKit Companion" --notes "Windows installer for the local voice-chat companion." --latest
+          fi
+          gh release upload companion-latest LiveKitCompanionSetup.exe --repo "$GITHUB_REPOSITORY" --clobber

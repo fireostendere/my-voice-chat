@@ -674,6 +674,34 @@ h2 a {
   font-size: 1rem;
 }
 
+.lk-cinema-companion-download {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: linear-gradient(110deg, rgba(246, 138, 96, 0.1), rgba(0, 0, 0, 0.16));
+  border: 1px solid rgba(246, 138, 96, 0.18);
+  border-radius: 0.7rem;
+}
+
+.lk-cinema-companion-download > div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.lk-cinema-companion-download > div > strong {
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.78rem;
+}
+
+.lk-cinema-companion-download > div > span {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
 .lk-cinema-dropzone {
   display: flex;
   min-height: 15rem;
@@ -770,6 +798,11 @@ h2 a {
 
   .lk-cinema-engine-route > b {
     display: none;
+  }
+
+  .lk-cinema-companion-download {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .lk-watch-together-overlay {

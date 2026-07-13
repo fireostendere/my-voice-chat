@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import React, { Suspense, useState } from 'react';
 import { encodePassphrase, generateRoomId, randomString } from '@/lib/client-utils';
+import { CompanionDownloadLink } from '@/lib/CompanionDownloadLink';
 import styles from '../styles/Home.module.css';
 
 function Tabs(props: React.PropsWithChildren<{}>) {
@@ -185,6 +186,19 @@ export default function Page() {
             and Next.js.
           </h2>
         </div>
+        <section className={styles.companionCard} aria-labelledby="companion-title">
+          <div className={styles.companionSignal} aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <div className={styles.companionCopy}>
+            <span className={styles.companionEyebrow}>LOCAL COMPANION</span>
+            <h3 id="companion-title">Рация и торрент-кинотеатр без ограничений браузера</h3>
+            <p>Windows EXE, глобальная клавиша разговора и обычные BitTorrent-пиры.</p>
+          </div>
+          <CompanionDownloadLink />
+        </section>
         <Suspense fallback="Loading">
           <Tabs>
             <DemoMeetingTab label="Demo" />

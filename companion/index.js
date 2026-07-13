@@ -11,10 +11,10 @@
  * Config (environment variables):
  *   PTT_PORT     WebSocket port (default 7331)
  *   PTT_KEY      Key name to use as the talk button (default "F8")
- *   PTT_ORIGINS  Comma-separated list of allowed browser origins, e.g.
- *                "https://chat.example.com". Default: allow all (any local
- *                web page can observe the talk-key state otherwise). Torrent
- *                commands default to loopback web origins only.
+ *   COMPANION_ORIGINS / PTT_ORIGINS
+ *                Comma-separated list of allowed browser origins, e.g.
+ *                "https://chat.example.com". Without an explicit list, Windows
+ *                asks the user once before trusting each remote origin.
  *
  * Run `npm run learn` (or `node index.js --learn`) and press a key to discover
  * its exact name, then set PTT_KEY to that name.
@@ -22,7 +22,9 @@
 
 const { GlobalKeyboardListener } = require('node-global-key-listener');
 const { WebSocketServer } = require('ws');
-const { isLoopbackOrigin } = require('./origin-core');
+const fs = require('node:fs');
+const path = require('node:path');
+const { companionDataDir, createFileOriginApprover } = require('./origin-approval');
 const { reduce } = require('./ptt-core');
 const { TorrentService } = require('./torrent-service');
 
@@ -34,15 +36,31 @@ const ALLOWED_ORIGINS = (process.env.COMPANION_ORIGINS || process.env.PTT_ORIGIN
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
+const DATA_DIR = companionDataDir();
+const PID_FILE = path.join(DATA_DIR, 'companion.pid');
+
+claimProcess();
+const originApprover = createFileOriginApprover({ configuredOrigins: ALLOWED_ORIGINS });
 
 const wss = new WebSocketServer({
   host: '127.0.0.1',
   port: PORT,
   // A 2 MB .torrent expands to roughly 2.8 MB as base64 JSON.
   maxPayload: 4 * 1024 * 1024,
+  verifyClient: (info, done) => {
+    originApprover.isAllowed(info.origin).then((allowed) => {
+      if (allowed) {
+        done(true);
+      } else {
+        console.warn(`[companion] rejected connection from origin: ${info.origin || 'unknown'}`);
+        done(false, 403, 'Origin not approved');
+      }
+    });
+  },
 });
 const torrentService = new TorrentService({ port: TORRENT_PORT });
 let talking = false;
+let shuttingDown = false;
 
 function broadcast(state) {
   const payload = JSON.stringify({ type: 'ptt', state });
@@ -65,21 +83,13 @@ wss.on('listening', () => {
 });
 wss.on('connection', (socket, req) => {
   const origin = req.headers.origin;
-  if (ALLOWED_ORIGINS.length > 0 && !ALLOWED_ORIGINS.includes(origin)) {
-    console.warn(`[companion] rejected connection from origin: ${origin || 'unknown'}`);
-    socket.close(1008, 'origin not allowed');
-    return;
-  }
-  console.log('[companion] browser connected');
-  const enableTorrent = ALLOWED_ORIGINS.length > 0 || isLoopbackOrigin(origin);
-  if (!enableTorrent) {
-    console.warn(
-      `[companion] torrent disabled for ${origin || 'unknown origin'}; set COMPANION_ORIGINS to trust it`,
-    );
-  }
-  torrentService.attachSocket(socket, { enableTorrent });
+  console.log(`[companion] browser connected: ${origin}`);
+  torrentService.attachSocket(socket, { enableTorrent: true });
 });
-wss.on('error', (err) => console.error('[companion] WebSocket server error:', err.message));
+wss.on('error', (err) => {
+  console.error('[companion] WebSocket server error:', err.message);
+  if (err.code === 'EADDRINUSE') shutdown(1);
+});
 
 const keyboard = new GlobalKeyboardListener();
 keyboard.addListener((event) => {
@@ -97,9 +107,36 @@ keyboard.addListener((event) => {
   talking = next;
 });
 
-process.on('SIGINT', async () => {
+process.on('SIGINT', () => shutdown(0));
+process.on('SIGTERM', () => shutdown(0));
+process.on('exit', releaseProcess);
+
+async function shutdown(exitCode) {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log('\n[companion] shutting down');
   await torrentService.close();
-  wss.close();
-  process.exit(0);
-});
+  keyboard.kill();
+  for (const client of wss.clients) client.close(1001, 'Companion stopping');
+  wss.close(() => process.exit(exitCode));
+  setTimeout(() => process.exit(exitCode), 1000).unref();
+}
+
+function claimProcess() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  try {
+    const existingPid = Number(fs.readFileSync(PID_FILE, 'utf8'));
+    if (existingPid && existingPid !== process.pid) {
+      process.kill(existingPid, 0);
+      console.error(`[companion] already running with PID ${existingPid}`);
+      process.exit(1);
+    }
+  } catch {}
+  fs.writeFileSync(PID_FILE, String(process.pid), 'utf8');
+}
+
+function releaseProcess() {
+  try {
+    if (Number(fs.readFileSync(PID_FILE, 'utf8')) === process.pid) fs.unlinkSync(PID_FILE);
+  } catch {}
+}
