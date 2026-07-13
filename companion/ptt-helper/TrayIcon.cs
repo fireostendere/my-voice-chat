@@ -226,13 +226,17 @@ internal sealed class TrayIcon : IDisposable
         new InvalidOperationException($"Could not {operation} (Win32 {Marshal.GetLastWin32Error()}).");
 
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint WindowProcedure(nint window, uint message, nuint word, nint parameter);
+    private delegate nint WindowProcedureDelegate(
+        nint window,
+        uint message,
+        nuint word,
+        nint parameter);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct WindowClass
     {
         internal uint Style;
-        internal WindowProcedure WindowProcedure;
+        internal WindowProcedureDelegate WindowProcedure;
         internal int ClassExtra;
         internal int WindowExtra;
         internal nint Instance;

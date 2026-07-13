@@ -17,9 +17,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: companion-installer-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows-installer:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
 
@@ -74,6 +79,11 @@ jobs:
           $version = node -p "require('./companion/package.json').version"
           & $compiler "/DAppVersion=$version" companion/installer/companion.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $installer = Resolve-Path 'companion/dist/LiveKitCompanionSetup.exe'
+          $checksum = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$checksum  LiveKitCompanionSetup.exe" |
+            Set-Content 'companion/dist/LiveKitCompanionSetup.exe.sha256' -Encoding ascii
 
       - name: Smoke test installer, startup, and uninstaller
         shell: pwsh
@@ -132,14 +142,18 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: LiveKitCompanionSetup
-          path: companion/dist/LiveKitCompanionSetup.exe
+          path: |
+            companion/dist/LiveKitCompanionSetup.exe
+            companion/dist/LiveKitCompanionSetup.exe.sha256
           if-no-files-found: error
+          retention-days: 7
 
 
   publish-release:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: windows-installer
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
@@ -155,4 +169,4 @@ jobs:
           if ! gh release view companion-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create companion-latest --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "LiveKit Companion" --notes "Windows installer for the local voice-chat companion." --latest
           fi
-          gh release upload companion-latest LiveKitCompanionSetup.exe --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload companion-latest LiveKitCompanionSetup.exe LiveKitCompanionSetup.exe.sha256 --repo "$GITHUB_REPOSITORY" --clobber
