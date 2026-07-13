@@ -1,6 +1,6 @@
 {
   "name": "livekit-ptt-companion",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Local LiveKit companion for global push-to-talk and host-side BitTorrent streaming.",
   "bin": {
@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "node index.js",
+    "build:icon": "node scripts/generate-icon.js",
     "build:ptt-helper": "dotnet publish ptt-helper/PttKeyState.csproj -c Release -r win-x64 -o bin",
     "keys": "node ptt-key-listener.js --list"
   },

@@ -18,7 +18,7 @@ import {
 
 export function StreamHostController() {
   const room = useRoomContext();
-  const { stream, stopStream } = useWatchTogether();
+  const { stream, stopStream, reportStreamPlayback, registerStreamController } = useWatchTogether();
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const publishedRef = React.useRef<{
     video?: LocalTrackPublication;
@@ -28,6 +28,75 @@ export function StreamHostController() {
   const [status, setStatus] = React.useState('Preparing file…');
   const [detail, setDetail] = React.useState('');
   const streamSource = stream.active ? stream.source : null;
+
+  const reportPlayback = React.useCallback(() => {
+    const video = videoRef.current;
+    if (!streamSource || !video) return;
+    const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
+    const currentTime = Number.isFinite(video.currentTime)
+      ? Math.round(Math.max(0, video.currentTime) * 2) / 2
+      : 0;
+    const phase = error
+      ? 'error'
+      : !isLiveStatus(status)
+        ? 'loading'
+        : video.ended
+          ? 'ended'
+          : video.paused
+            ? 'paused'
+            : 'playing';
+    const sourceName =
+      isLiveStatus(status) && detail
+        ? detail
+        : streamSource.kind === 'file'
+          ? streamSource.file.name
+          : streamSource.input.name;
+    reportStreamPlayback({
+      active: true,
+      name: limitLabel(sourceName, 260, 'Media'),
+      phase,
+      status: limitLabel(error ? 'Stream error' : status, 512, 'Playback'),
+      detail: limitLabel(error ?? detail, 512, sourceName),
+      currentTime,
+      duration,
+      paused: video.paused,
+      canSeek: duration !== null,
+    });
+  }, [detail, error, reportStreamPlayback, status, streamSource]);
+
+  React.useEffect(() => {
+    const video = videoRef.current;
+    if (!streamSource || !video) return;
+    const events = [
+      'loadedmetadata',
+      'durationchange',
+      'timeupdate',
+      'play',
+      'pause',
+      'ended',
+      'seeking',
+      'seeked',
+      'waiting',
+    ];
+    events.forEach((event) => video.addEventListener(event, reportPlayback));
+    reportPlayback();
+    return () => events.forEach((event) => video.removeEventListener(event, reportPlayback));
+  }, [reportPlayback, streamSource]);
+
+  React.useEffect(() => {
+    const video = videoRef.current;
+    if (!streamSource || !video) return;
+    return registerStreamController(async (command) => {
+      if (command.action === 'play') {
+        await video.play();
+      } else if (command.action === 'pause') {
+        video.pause();
+      } else if (command.action === 'seek') {
+        const maximum = Number.isFinite(video.duration) ? video.duration : command.currentTime;
+        video.currentTime = Math.min(Math.max(0, command.currentTime), Math.max(0, maximum));
+      }
+    });
+  }, [registerStreamController, streamSource]);
 
   React.useEffect(() => {
     if (!streamSource || !videoRef.current) return;
@@ -201,4 +270,12 @@ function updateTorrentStatus(
 
 function engineLabel(engine: TorrentEngine): string {
   return engine === 'companion' ? 'Companion' : 'WebTorrent';
+}
+
+function isLiveStatus(status: string): boolean {
+  return status === 'Live' || status.startsWith('Live ·');
+}
+
+function limitLabel(value: string, maxLength: number, fallback: string): string {
+  return value.trim().slice(0, maxLength) || fallback.slice(0, maxLength);
 }

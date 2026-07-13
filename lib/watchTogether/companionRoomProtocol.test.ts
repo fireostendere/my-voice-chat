@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { parseCompanionTorrentCommand } from './companionRoomProtocol';
+import {
+  parseCompanionPlaybackCommand,
+  parseCompanionTorrentCommand,
+} from './companionRoomProtocol';
 
 describe('parseCompanionTorrentCommand', () => {
   it('accepts a standard magnet command', () => {
@@ -45,6 +48,44 @@ describe('parseCompanionTorrentCommand', () => {
         type: 'torrent-open',
         commandId: 'command-3',
         input: { kind: 'magnet', magnet: 'https://example.com', name: 'Movie' },
+      }),
+    ).toBeNull();
+  });
+});
+
+describe('parseCompanionPlaybackCommand', () => {
+  it('accepts play, pause, stop, and finite seek commands', () => {
+    expect(
+      parseCompanionPlaybackCommand({
+        type: 'playback-control',
+        commandId: 'play-1',
+        action: 'play',
+      }),
+    ).toEqual({ commandId: 'play-1', control: { action: 'play' } });
+    expect(
+      parseCompanionPlaybackCommand({
+        type: 'playback-control',
+        commandId: 'seek-1',
+        action: 'seek',
+        currentTime: 42.5,
+      }),
+    ).toEqual({ commandId: 'seek-1', control: { action: 'seek', currentTime: 42.5 } });
+  });
+
+  it('rejects malformed playback commands', () => {
+    expect(
+      parseCompanionPlaybackCommand({
+        type: 'playback-control',
+        commandId: '',
+        action: 'pause',
+      }),
+    ).toBeNull();
+    expect(
+      parseCompanionPlaybackCommand({
+        type: 'playback-control',
+        commandId: 'seek-2',
+        action: 'seek',
+        currentTime: Number.NaN,
       }),
     ).toBeNull();
   });

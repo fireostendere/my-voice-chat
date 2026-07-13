@@ -1,14 +1,11 @@
-LiveKit Companion runs in the background and places a LiveKit icon in the system tray.
+LiveKit Companion is ready to use as a regular Windows application.
 
-Use the LiveKit Companion shortcuts in the Start menu to:
+Open LiveKit Companion from the desktop or Start menu. Its control panel starts the
+background service automatically, lets you capture the global push-to-talk key, sends
+magnet links or .torrent files to an active room, and controls playback there.
 
-* open the companion window and send a magnet or .torrent file to an active room;
-* change the global push-to-talk key;
-* check whether it is running and view the latest startup log;
-* stop the background process;
-* uninstall the application.
-
-Double-click the tray icon to reopen the companion window. Right-click it to open or
-exit the companion.
+No batch files, command prompts, or manual configuration are required. The companion
+keeps running in the background and places the LiveKit icon in the system tray.
+Double-click that icon to reopen the control panel, or right-click it to open or exit.
 
 You can also uninstall it from Windows Settings > Apps > Installed apps > LiveKit Companion.

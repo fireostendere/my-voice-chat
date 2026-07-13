@@ -1,7 +1,11 @@
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
-import { CompanionUiServer, validateUiTorrentInput } from './companion-ui.js';
+import {
+  CompanionUiServer,
+  validateUiPlaybackCommand,
+  validateUiTorrentInput,
+} from './companion-ui.js';
 
 describe('companion UI torrent input', () => {
   it('accepts ordinary magnet links', () => {
@@ -46,15 +50,33 @@ describe('companion UI torrent input', () => {
   });
 });
 
+describe('companion UI playback controls', () => {
+  it('accepts supported controls and rejects invalid seek positions', () => {
+    expect(validateUiPlaybackCommand({ roomId: 'room-1', action: 'pause' })).toEqual({
+      action: 'pause',
+    });
+    expect(
+      validateUiPlaybackCommand({ roomId: 'room-1', action: 'seek', currentTime: 18.5 }),
+    ).toEqual({ action: 'seek', currentTime: 18.5 });
+    expect(() =>
+      validateUiPlaybackCommand({ roomId: 'room-1', action: 'seek', currentTime: -1 }),
+    ).toThrow('Invalid playback command');
+  });
+});
+
 describe('companion UI server', () => {
   it('serves the local UI and protects its API with a token and origin check', async () => {
     const setPttKey = vi.fn((key) => key);
+    const controlPlayback = vi.fn().mockResolvedValue({
+      accepted: true,
+      message: 'Playback control applied.',
+    });
     const server = new CompanionUiServer({
       port: 7333,
       getPttKey: () => 'F8',
       setPttKey,
       supportedKeys: ['F8', 'F9'],
-      roomRegistry: { listRooms: () => [], openTorrent: vi.fn() },
+      roomRegistry: { listRooms: () => [], openTorrent: vi.fn(), controlPlayback },
       uiDir: path.join(process.cwd(), 'companion', 'ui'),
     });
     const page = await dispatch(server, '/');
@@ -79,11 +101,26 @@ describe('companion UI server', () => {
       ),
     ).rejects.toThrow('Invalid origin');
     expect(setPttKey).not.toHaveBeenCalled();
+
+    const playback = await dispatch(
+      server,
+      '/api/playback',
+      {
+        'X-Companion-Token': token,
+        Origin: 'http://127.0.0.1:7333',
+      },
+      JSON.stringify({ roomId: 'room-1', action: 'seek', currentTime: 24 }),
+    );
+    expect(playback.statusCode).toBe(200);
+    expect(controlPlayback).toHaveBeenCalledWith('room-1', {
+      action: 'seek',
+      currentTime: 24,
+    });
   });
 });
 
 async function dispatch(server, pathname, headers = {}, body) {
-  const request = Readable.from(body === undefined ? [] : [body]);
+  const request = Readable.from(body === undefined ? [] : [Buffer.from(body)]);
   request.method = body === undefined ? 'GET' : 'POST';
   request.url = pathname;
   request.headers = Object.fromEntries([

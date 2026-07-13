@@ -4,13 +4,13 @@ on:
   pull_request:
     paths:
       - 'companion/**'
-      - 'public/favicon.ico'
+      - 'public/images/livekit-apple-touch.png'
       - '.github/workflows/companion-release.yaml'
   push:
     branches: [main]
     paths:
       - 'companion/**'
-      - 'public/favicon.ico'
+      - 'public/images/livekit-apple-touch.png'
       - '.github/workflows/companion-release.yaml'
   workflow_dispatch:
 
@@ -39,8 +39,14 @@ jobs:
         working-directory: companion
         run: npm ci --omit=dev --no-audit --no-fund
 
-      - name: Build limited PTT key helper
-        run: dotnet publish companion/ptt-helper/PttKeyState.csproj -c Release -r win-x64 -o companion/installer/build/ptt-helper
+      - name: Generate Windows icon
+        run: node companion/scripts/generate-icon.js
+
+      - name: Build native app and limited PTT helper
+        run: |
+          $version = node -p "require('./companion/package.json').version"
+          dotnet publish companion/app-launcher/LiveKitCompanion.csproj -c Release -r win-x64 -o companion/installer/build/app-launcher -p:Version=$version
+          dotnet publish companion/ptt-helper/PttKeyState.csproj -c Release -r win-x64 -o companion/installer/build/ptt-helper -p:Version=$version
 
       - name: Prepare portable runtime
         shell: pwsh
@@ -52,6 +58,10 @@ jobs:
           $pttHelper = 'companion/installer/build/ptt-helper/LiveKitCompanionNative.exe'
           if (-not (Test-Path $pttHelper)) {
             throw "PTT key helper is missing: $pttHelper"
+          }
+          $app = 'companion/installer/build/app-launcher/LiveKitCompanion.exe'
+          if (-not (Test-Path $app)) {
+            throw "Native companion app is missing: $app"
           }
 
       - name: Compile EXE installer
@@ -74,14 +84,22 @@ jobs:
           if ($install.ExitCode -ne 0) { throw "Installer exited with code $($install.ExitCode)" }
 
           $uninstaller = Join-Path $installDir 'unins000.exe'
-          $startScript = Join-Path $installDir 'start-companion.cmd'
-          $stopScript = Join-Path $installDir 'stop-companion.cmd'
-          $iconFile = Join-Path $installDir 'LiveKitCompanion.ico'
+          $app = Join-Path $installDir 'LiveKitCompanion.exe'
           if (-not (Test-Path $uninstaller)) { throw "Uninstaller is missing: $uninstaller" }
-          if (-not (Test-Path $startScript)) { throw "Start script is missing: $startScript" }
-          if (-not (Test-Path $iconFile)) { throw "LiveKit icon is missing: $iconFile" }
+          if (-not (Test-Path $app)) { throw "Companion application is missing: $app" }
+          Add-Type -AssemblyName System.Drawing
+          $setupIcon = [System.Drawing.Icon]::ExtractAssociatedIcon($installer)
+          $appIcon = [System.Drawing.Icon]::ExtractAssociatedIcon($app)
+          if (-not $setupIcon) { throw 'Installer does not contain an application icon.' }
+          if (-not $appIcon) { throw 'Companion EXE does not contain an application icon.' }
+          $setupIcon.Dispose()
+          $appIcon.Dispose()
+          if (Test-Path (Join-Path $installDir 'launch-companion.vbs')) {
+            throw 'Legacy VBS launcher should not be installed.'
+          }
 
-          Start-Process 'cmd.exe' -ArgumentList '/d', '/c', "`"$startScript`"" -WindowStyle Hidden
+          $start = Start-Process $app -ArgumentList '--startup' -PassThru -Wait
+          if ($start.ExitCode -ne 0) { throw "Companion app exited with code $($start.ExitCode)" }
           Start-Sleep -Seconds 4
           $dataDir = Join-Path $env:LOCALAPPDATA 'LiveKitCompanion'
           $pidFile = Join-Path $dataDir 'companion.pid'
@@ -96,14 +114,17 @@ jobs:
             throw "Companion process $companionPid is not running."
           }
           $ui = Invoke-WebRequest 'http://127.0.0.1:7333/' -UseBasicParsing
-          if ($ui.StatusCode -ne 200 -or $ui.Content -notmatch '<title>LiveKit Companion</title>') {
+          if ($ui.StatusCode -ne 200 -or
+              $ui.Content -notmatch '<title>LiveKit Companion</title>' -or
+              $ui.Content -notmatch 'id="playback-toggle"') {
             throw 'Companion UI did not start correctly.'
           }
           $helper = Get-CimInstance Win32_Process -Filter "Name = 'LiveKitCompanionNative.exe'" |
             Where-Object { $_.ExecutablePath -like "$installDir*" }
           if (-not $helper) { throw 'Native PTT and tray helper is not running.' }
 
-          & 'cmd.exe' '/d' '/c' "`"$stopScript`""
+          $stop = Start-Process $app -ArgumentList '--stop' -PassThru -Wait
+          if ($stop.ExitCode -ne 0) { throw "Companion stop exited with code $($stop.ExitCode)" }
           $uninstall = Start-Process $uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru -Wait
           if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited with code $($uninstall.ExitCode)" }
 

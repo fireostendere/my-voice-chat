@@ -68,8 +68,17 @@ class CompanionUiServer {
     if (request.method === 'GET' && url.pathname === '/livekit.ico') {
       const icon = await fs
         .readFile(path.join(this.uiDir, 'livekit.ico'))
-        .catch(() => fs.readFile(path.join(__dirname, '..', 'public', 'favicon.ico')));
+        .catch(() => fs.readFile(path.join(__dirname, 'assets', 'livekit-companion.ico')));
       this.send(response, 200, icon, 'image/x-icon');
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/livekit.png') {
+      const image = await fs
+        .readFile(path.join(this.uiDir, 'livekit.png'))
+        .catch(() =>
+          fs.readFile(path.join(__dirname, '..', 'public', 'images', 'livekit-apple-touch.png')),
+        );
+      this.send(response, 200, image, 'image/png');
       return;
     }
 
@@ -94,6 +103,14 @@ class CompanionUiServer {
       const body = await readJson(request, MAX_BODY_BYTES);
       const input = validateUiTorrentInput(body.input);
       const result = await this.roomRegistry.openTorrent(body.roomId, input);
+      this.sendJson(response, result.accepted ? 200 : 409, result);
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/api/playback') {
+      this.requireSameOrigin(request);
+      const body = await readJson(request, 4096);
+      const control = validateUiPlaybackCommand(body);
+      const result = await this.roomRegistry.controlPlayback(body.roomId, control);
       this.sendJson(response, result.accepted ? 200 : 409, result);
       return;
     }
@@ -158,6 +175,25 @@ function validFileName(value) {
   return name;
 }
 
+function validateUiPlaybackCommand(value) {
+  if (!value || typeof value !== 'object') throw httpError(400, 'Invalid playback command.');
+  if (typeof value.roomId !== 'string' || value.roomId.length < 1 || value.roomId.length > 128) {
+    throw httpError(400, 'Choose an active room first.');
+  }
+  if (value.action === 'play' || value.action === 'pause' || value.action === 'stop') {
+    return { action: value.action };
+  }
+  if (
+    value.action === 'seek' &&
+    typeof value.currentTime === 'number' &&
+    Number.isFinite(value.currentTime) &&
+    value.currentTime >= 0
+  ) {
+    return { action: 'seek', currentTime: value.currentTime };
+  }
+  throw httpError(400, 'Invalid playback command.');
+}
+
 function readJson(request, limit) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -191,4 +227,4 @@ function httpError(statusCode, message) {
   return error;
 }
 
-module.exports = { CompanionUiServer, validateUiTorrentInput };
+module.exports = { CompanionUiServer, validateUiPlaybackCommand, validateUiTorrentInput };

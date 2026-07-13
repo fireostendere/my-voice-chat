@@ -1,15 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
-    <AssemblyName>LiveKitCompanionNative</AssemblyName>
-    <RootNamespace>LiveKitCompanion</RootNamespace>
+    <AssemblyName>LiveKitCompanion</AssemblyName>
+    <RootNamespace>LiveKitCompanion.App</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PublishAot>true</PublishAot>
+    <SelfContained>true</SelfContained>
     <InvariantGlobalization>true</InvariantGlobalization>
     <StripSymbols>true</StripSymbols>
     <OptimizationPreference>Size</OptimizationPreference>
     <ApplicationIcon>..\assets\livekit-companion.ico</ApplicationIcon>
+    <AssemblyTitle>LiveKit Companion</AssemblyTitle>
+    <Product>LiveKit Companion</Product>
+    <Description>Local media and push-to-talk companion for LiveKit</Description>
+    <Company>fireostendere</Company>
   </PropertyGroup>
 </Project>

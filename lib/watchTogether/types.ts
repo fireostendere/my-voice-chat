@@ -87,3 +87,23 @@ export type WatchTogetherStreamSource =
 export type WatchTogetherStreamState =
   | { active: false }
   | { active: true; source: WatchTogetherStreamSource };
+
+export type StreamPlaybackPhase = 'loading' | 'playing' | 'paused' | 'ended' | 'error';
+
+export type StreamPlaybackState =
+  | { active: false }
+  | {
+      active: true;
+      name: string;
+      phase: StreamPlaybackPhase;
+      status: string;
+      detail: string;
+      currentTime: number;
+      duration: number | null;
+      paused: boolean;
+      canSeek: boolean;
+    };
+
+export type StreamControlCommand =
+  | { action: 'play' | 'pause' | 'stop' }
+  | { action: 'seek'; currentTime: number };

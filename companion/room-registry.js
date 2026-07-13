@@ -41,6 +41,7 @@ class RoomRegistry {
         roomName,
         participantIdentity,
         connectedAt: existing?.connectedAt || Date.now(),
+        playback: existing?.playback || { active: false },
         socket,
       };
       this.roomsBySocket.set(socket, room);
@@ -48,9 +49,16 @@ class RoomRegistry {
       return;
     }
 
-    if (message.type === 'torrent-open-result') {
+    if (message.type === 'room-playback-state') {
+      const room = this.roomsBySocket.get(socket);
+      const playback = validPlaybackState(message.playback);
+      if (room && playback) room.playback = playback;
+      return;
+    }
+
+    if (message.type === 'torrent-open-result' || message.type === 'playback-control-result') {
       const pending = this.pendingCommands.get(message.commandId);
-      if (!pending || pending.socket !== socket) return;
+      if (!pending || pending.socket !== socket || pending.resultType !== message.type) return;
       clearTimeout(pending.timer);
       this.pendingCommands.delete(message.commandId);
       pending.resolve({
@@ -59,8 +67,12 @@ class RoomRegistry {
           typeof message.message === 'string' && message.message.length <= 512
             ? message.message
             : message.accepted === true
-              ? 'Torrent sent to the room.'
-              : 'The room rejected the torrent.',
+              ? pending.resultType === 'torrent-open-result'
+                ? 'Torrent sent to the room.'
+                : 'Playback control applied.'
+              : pending.resultType === 'torrent-open-result'
+                ? 'The room rejected the torrent.'
+                : 'The room rejected the playback control.',
       });
     }
   }
@@ -68,16 +80,30 @@ class RoomRegistry {
   listRooms() {
     return [...this.roomsBySocket.values()]
       .filter(({ socket }) => socket.readyState === 1)
-      .map(({ id, roomName, participantIdentity, connectedAt }) => ({
+      .map(({ id, roomName, participantIdentity, connectedAt, playback }) => ({
         id,
         roomName,
         participantIdentity,
         connectedAt,
+        playback,
       }))
       .sort((left, right) => left.roomName.localeCompare(right.roomName));
   }
 
   openTorrent(roomId, input) {
+    return this.sendCommand(roomId, { type: 'torrent-open', input }, 'torrent-open-result');
+  }
+
+  controlPlayback(roomId, control) {
+    const command = validPlaybackControl(control);
+    return this.sendCommand(
+      roomId,
+      { type: 'playback-control', ...command },
+      'playback-control-result',
+    );
+  }
+
+  sendCommand(roomId, message, resultType) {
     const room = [...this.roomsBySocket.values()].find(
       (candidate) => candidate.id === roomId && candidate.socket.readyState === 1,
     );
@@ -87,10 +113,16 @@ class RoomRegistry {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingCommands.delete(commandId);
-        reject(new Error('The room did not acknowledge the torrent command.'));
+        reject(new Error('The room did not acknowledge the companion command.'));
       }, this.commandTimeoutMs);
-      this.pendingCommands.set(commandId, { socket: room.socket, resolve, reject, timer });
-      this.send(room.socket, { type: 'torrent-open', commandId, input });
+      this.pendingCommands.set(commandId, {
+        socket: room.socket,
+        resolve,
+        reject,
+        timer,
+        resultType,
+      });
+      this.send(room.socket, { ...message, commandId });
     });
   }
 
@@ -125,4 +157,50 @@ function validLabel(value, label) {
   return normalized;
 }
 
-module.exports = { RoomRegistry, validLabel };
+function validPlaybackState(value) {
+  if (!value || typeof value !== 'object') return null;
+  if (value.active === false) return { active: false };
+  if (value.active !== true) return null;
+
+  const phases = new Set(['loading', 'playing', 'paused', 'ended', 'error']);
+  if (!phases.has(value.phase)) return null;
+  if (!isText(value.name, 260) || !isText(value.status, 512) || !isText(value.detail, 512)) {
+    return null;
+  }
+  if (!isNonNegativeNumber(value.currentTime)) return null;
+  if (value.duration !== null && !isNonNegativeNumber(value.duration)) return null;
+  if (typeof value.paused !== 'boolean' || typeof value.canSeek !== 'boolean') return null;
+
+  return {
+    active: true,
+    name: value.name.trim(),
+    phase: value.phase,
+    status: value.status.trim(),
+    detail: value.detail.trim(),
+    currentTime: value.currentTime,
+    duration: value.duration,
+    paused: value.paused,
+    canSeek: value.canSeek,
+  };
+}
+
+function validPlaybackControl(value) {
+  if (!value || typeof value !== 'object') throw new Error('Invalid playback command.');
+  if (value.action === 'play' || value.action === 'pause' || value.action === 'stop') {
+    return { action: value.action };
+  }
+  if (value.action === 'seek' && isNonNegativeNumber(value.currentTime)) {
+    return { action: 'seek', currentTime: value.currentTime };
+  }
+  throw new Error('Invalid playback command.');
+}
+
+function isText(value, maxLength) {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= maxLength;
+}
+
+function isNonNegativeNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+module.exports = { RoomRegistry, validLabel, validPlaybackControl, validPlaybackState };

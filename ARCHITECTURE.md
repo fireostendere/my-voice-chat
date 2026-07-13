@@ -207,7 +207,10 @@ temporary directory.
 and registers the room name and local participant identity. The companion control UI
 lists those registrations and sends a validated `torrent-open` command to the selected
 room. The bridge converts the serialized `.torrent` bytes back to `TorrentInput` and
-starts the existing host pipeline; it does not create a second torrent engine.
+starts the existing host pipeline; it does not create a second torrent engine. While
+that pipeline is active, the bridge reports title, phase, position, duration, and seek
+support back to the companion. Validated `playback-control` commands let the control
+panel play, pause, seek, or stop the host browser's actual `<video>` element.
 
 If no capable companion answers within the detection timeout, the browser dynamically
 loads the WebTorrent browser bundle and its service worker. This fallback never talks
@@ -220,22 +223,27 @@ The home page and the room's always-visible top toolbar link to
 redirects to `LiveKitCompanionSetup.exe` in a rolling GitHub Release, so the Next.js
 server does not build or store binaries. A Windows GitHub Actions job packages Node.js,
 the companion, its dependencies, shortcuts, and autostart support with Inno Setup. The
-same job builds `LiveKitCompanionNative.exe` from repository C# source with .NET Native
-AOT.
+same job builds the user-facing `LiveKitCompanion.exe` launcher and the internal
+`LiveKitCompanionNative.exe` key/tray helper from repository C# source with .NET Native
+AOT. A generated multi-resolution LiveKit ICO is embedded in both binaries and the
+installer.
 
 The companion also serves a token-protected control UI on `127.0.0.1:7333`. It accepts
-magnet links and `.torrent` files for active rooms and updates the persisted PTT key.
-The native helper owns the LiveKit tray icon, opens this UI in an app-style Edge window,
-and can request an orderly Node shutdown.
+magnet links and `.torrent` files for active rooms, exposes remote playback controls,
+and captures or selects the persisted PTT key. Desktop, Start-menu, post-install, and
+autostart entries all target `LiveKitCompanion.exe`; the launcher starts the bundled
+Node process directly and opens the UI in an app-style Edge window. No CMD or VBS
+launcher is installed. The internal helper owns the LiveKit tray icon and can request
+an orderly Node shutdown.
 
 The PTT helper polls only the configured Windows virtual key. It replaces the previous
 third-party global keyboard hook and does not enumerate other keys or collect typed
 characters. The Node process converts only `DOWN`/`UP` transitions into PTT WebSocket
 messages. The same helper displays the Windows origin-approval dialog without invoking
 PowerShell or evaluating a generated script. Startup failures produce a visible native
-dialog and remain available through the Start menu diagnostics shortcut. The release
-workflow smoke-tests installation, background startup, PID creation, and uninstallation
-on Windows before publishing the EXE.
+dialog with the diagnostic-log path. The release workflow smoke-tests the native EXE
+entry point, background startup, control UI, PID creation, and uninstallation on Windows
+before publishing the installer.
 
 On first contact from a remote browser origin, the companion displays a native Windows
 approval dialog. Approved origins are persisted per user and receive both PTT and

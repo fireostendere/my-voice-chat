@@ -20,6 +20,8 @@
 /companion/dist/
 /companion/bin/
 /companion/installer/build/
+/companion/app-launcher/bin/
+/companion/app-launcher/obj/
 /companion/ptt-helper/bin/
 /companion/ptt-helper/obj/
 

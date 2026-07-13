@@ -70,6 +70,56 @@ describe('RoomRegistry', () => {
     await expect(resultPromise).resolves.toEqual({ accepted: true, message: 'Torrent started.' });
   });
 
+  it('tracks playback state and forwards remote player controls', async () => {
+    const registry = new RoomRegistry({ commandTimeoutMs: 100 });
+    const socket = new FakeSocket();
+    registry.attachSocket(socket);
+    socket.emit(
+      'message',
+      JSON.stringify({ type: 'room-register', roomName: 'cinema', participantIdentity: 'host' }),
+    );
+    socket.emit(
+      'message',
+      JSON.stringify({
+        type: 'room-playback-state',
+        playback: {
+          active: true,
+          name: 'Movie.mp4',
+          phase: 'playing',
+          status: 'Live · Companion',
+          detail: 'Movie.mp4',
+          currentTime: 12.5,
+          duration: 120,
+          paused: false,
+          canSeek: true,
+        },
+      }),
+    );
+
+    const room = registry.listRooms()[0];
+    expect(room.playback).toEqual(expect.objectContaining({ active: true, currentTime: 12.5 }));
+
+    const resultPromise = registry.controlPlayback(room.id, { action: 'seek', currentTime: 42 });
+    const command = socket.sent.find((message) => message.type === 'playback-control');
+    expect(command).toEqual(
+      expect.objectContaining({ action: 'seek', currentTime: 42, commandId: expect.any(String) }),
+    );
+    socket.emit(
+      'message',
+      JSON.stringify({
+        type: 'playback-control-result',
+        commandId: command.commandId,
+        accepted: true,
+        message: 'Playback control applied.',
+      }),
+    );
+
+    await expect(resultPromise).resolves.toEqual({
+      accepted: true,
+      message: 'Playback control applied.',
+    });
+  });
+
   it('rejects commands for rooms that are no longer connected', async () => {
     const registry = new RoomRegistry();
     await expect(

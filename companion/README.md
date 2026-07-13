@@ -40,20 +40,22 @@ Start menu and desktop shortcuts, can enable startup with Windows, and starts th
 companion in the background. It does not require a system-wide Node.js installation or
 administrator rights.
 
-Opening **LiveKit Companion** from the desktop or Start menu starts the background
-service and opens its local control window. The LiveKit tray icon can reopen that
-window or exit the service. Use **Status and diagnostics** to see its PID and latest
-startup log. Use **Uninstall LiveKit Companion** or **Windows Settings → Apps →
-Installed apps** to remove it.
+Opening `LiveKitCompanion.exe` from the desktop or Start menu starts the bundled
+background service, waits for it to become ready, and opens the control panel as an
+app-style window. The user-facing shortcuts point directly to this EXE; there are no
+batch or VBS launchers and no config files to edit. The LiveKit tray icon can reopen
+the panel or exit the service. Use **Uninstall LiveKit Companion** or **Windows
+Settings → Apps → Installed apps** to remove it.
 
 The first time a deployed voice-chat site connects, Windows displays an approval
 dialog. Verify its origin and choose **Yes**. The companion remembers approved origins
 under `%LOCALAPPDATA%\LiveKitCompanion`.
 
-The control window lists active voice-chat rooms. Choose a `.torrent` file or paste a
-magnet link to start it in the selected room. It also validates and saves the global
-PTT key immediately; `F8` remains the default. The legacy **Configure PTT key** Start
-menu shortcut remains available for diagnostics.
+The control panel lists active voice-chat rooms. Choose a `.torrent` file or paste a
+magnet link to start it in the selected room, then use the same panel to play, pause,
+seek, or stop the browser-hosted stream. Click the large key display and press a key or
+mouse side button to configure global PTT; the selector remains available as a
+fallback, and `F8` is the default. Settings persist automatically between EXE launches.
 
 ## Setup
 
@@ -129,6 +131,8 @@ trusted automatically.
 - Automatically selects the largest MP4/M4V/WebM/OGG/MOV/MKV file.
 - Supports HTTP byte ranges, so seeking prioritizes the required torrent pieces.
 - Shows peers, download speed, progress, and the selected engine in the host panel.
+- Reports live playback state to the companion control panel and accepts validated
+  play, pause, seek, and stop commands for the selected room.
 - Runs one torrent session at a time and replaces the previous session on a new start.
 - Deletes the temporary piece store on stop, disconnect, or companion shutdown.
 
@@ -155,7 +159,8 @@ bypass or suppress security products.
 
 ## Autostart
 
-The EXE installer can create a per-user Startup shortcut. Autostart launches the
-service and tray icon without forcing the control window to the foreground. For a
-manual installation, create a shortcut that runs `npm start` in this directory and
-place it in the Windows Startup folder (`Win+R`, then `shell:startup`).
+The EXE installer can create a per-user Startup shortcut. It runs
+`LiveKitCompanion.exe --startup`, which launches the service and tray icon without
+forcing the control panel to the foreground. For a manual development installation,
+create a shortcut that runs `npm start` in this directory and place it in the Windows
+Startup folder (`Win+R`, then `shell:startup`).

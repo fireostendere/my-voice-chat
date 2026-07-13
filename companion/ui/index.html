@@ -6,7 +6,7 @@
     <meta name="companion-token" content="__COMPANION_TOKEN__" />
     <meta name="theme-color" content="#11100f" />
     <title>LiveKit Companion</title>
-    <link rel="icon" href="/livekit.ico" />
+    <link rel="icon" href="/livekit.ico?v=2" sizes="any" />
     <link rel="stylesheet" href="/styles.css" />
     <script src="/app.js" defer></script>
   </head>
@@ -15,7 +15,7 @@
     <div class="ambient ambient-two"></div>
     <main class="shell">
       <header class="masthead">
-        <div class="brand-mark"><img src="/livekit.ico" alt="" /></div>
+        <div class="brand-mark"><img src="/livekit.png?v=2" alt="" /></div>
         <div class="brand-copy">
           <span class="eyebrow">LOCAL MEDIA BRIDGE</span>
           <h1>LiveKit <em>Companion</em></h1>
@@ -90,7 +90,10 @@
             </div>
           </div>
 
-          <div class="key-display" id="key-display">F8</div>
+          <button type="button" class="key-display" id="key-capture-button">
+            <strong id="key-display">F8</strong>
+            <small id="key-capture-label">Click to capture a key</small>
+          </button>
           <label class="field compact" for="ptt-key-select">
             <span>Configured key</span>
             <select id="ptt-key-select"></select>
@@ -109,6 +112,55 @@
             </div>
           </div>
         </aside>
+
+        <section class="panel playback-panel" id="playback-panel">
+          <div class="panel-heading playback-heading">
+            <span class="section-index">04</span>
+            <div>
+              <span class="eyebrow">ROOM PLAYER</span>
+              <h2>Playback controls</h2>
+            </div>
+            <span class="playback-state" id="playback-state">IDLE</span>
+          </div>
+
+          <div class="playback-main">
+            <div class="playback-art" aria-hidden="true">▶</div>
+            <div class="playback-copy">
+              <strong id="playback-title">Nothing is playing</strong>
+              <span id="playback-detail"
+                >Choose a torrent above and send it to an active room.</span
+              >
+            </div>
+          </div>
+
+          <label class="seek-control" for="playback-seek">
+            <input id="playback-seek" type="range" min="0" max="1000" value="0" disabled />
+            <span>
+              <time id="playback-current">0:00</time>
+              <time id="playback-duration">0:00</time>
+            </span>
+          </label>
+
+          <div class="playback-actions">
+            <button
+              type="button"
+              class="primary-action playback-toggle"
+              id="playback-toggle"
+              disabled
+            >
+              <span>Play</span>
+              <b aria-hidden="true">▶</b>
+            </button>
+            <button
+              type="button"
+              class="secondary-action playback-stop"
+              id="playback-stop"
+              disabled
+            >
+              Stop
+            </button>
+          </div>
+        </section>
       </div>
 
       <footer>

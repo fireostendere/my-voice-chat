@@ -6,6 +6,8 @@ import {
   WATCH_TOGETHER_TOPIC,
   isWatchSyncMessage,
   type EmbedKind,
+  type StreamControlCommand,
+  type StreamPlaybackState,
   type TorrentInput,
   type WatchSyncMessage,
   type WatchTogetherEmbedState,
@@ -20,6 +22,12 @@ type Ctx = {
   startStream: (file: File) => void;
   startTorrent: (input: TorrentInput) => void;
   stopStream: () => void;
+  streamPlayback: StreamPlaybackState;
+  reportStreamPlayback: (state: StreamPlaybackState) => void;
+  registerStreamController: (
+    controller: (command: StreamControlCommand) => void | Promise<void>,
+  ) => () => void;
+  controlStream: (command: StreamControlCommand) => Promise<void>;
   sendSync: (msg: WatchSyncMessage) => void;
   subscribe: (listener: (msg: WatchSyncMessage) => void) => () => void;
 };
@@ -33,7 +41,13 @@ export function WatchTogetherProvider({ children }: { children: React.ReactNode 
   const { localParticipant } = useLocalParticipant();
   const [embed, setEmbed] = React.useState<WatchTogetherEmbedState>({ active: false });
   const [stream, setStream] = React.useState<WatchTogetherStreamState>({ active: false });
+  const [streamPlayback, setStreamPlayback] = React.useState<StreamPlaybackState>({
+    active: false,
+  });
   const listenersRef = React.useRef(new Set<(msg: WatchSyncMessage) => void>());
+  const streamControllerRef = React.useRef<
+    ((command: StreamControlCommand) => void | Promise<void>) | null
+  >(null);
   const lastHeartbeatRef = React.useRef(0);
   const embedRef = React.useRef(embed);
   embedRef.current = embed;
@@ -55,6 +69,7 @@ export function WatchTogetherProvider({ children }: { children: React.ReactNode 
       if (current.active && current.hostIdentity !== fromIdentity) return;
       lastHeartbeatRef.current = Date.now();
       setStream({ active: false });
+      setStreamPlayback({ active: false });
       setEmbed({
         active: true,
         kind: parsed.kind,
@@ -67,6 +82,10 @@ export function WatchTogetherProvider({ children }: { children: React.ReactNode 
       const current = embedRef.current;
       if (current.active && current.hostIdentity !== fromIdentity) return;
       lastHeartbeatRef.current = Date.now();
+      if (!current.active) {
+        setStream({ active: false });
+        setStreamPlayback({ active: false });
+      }
       setEmbed((prev) => {
         if (prev.active) return prev;
         return {
@@ -118,6 +137,7 @@ export function WatchTogetherProvider({ children }: { children: React.ReactNode 
       if (current.active && !current.isHost) return;
       const identity = localParticipant.identity;
       setStream({ active: false });
+      setStreamPlayback({ active: false });
       sendSync({ type: 'start-embed', kind, src, hostIdentity: identity, ts: Date.now() });
       setEmbed({ active: true, kind, src, hostIdentity: identity, isHost: true });
     },
@@ -138,6 +158,7 @@ export function WatchTogetherProvider({ children }: { children: React.ReactNode 
         setEmbed({ active: false });
       }
       setStream({ active: true, source: { kind: 'file', file } });
+      setStreamPlayback(createLoadingPlayback(file.name));
     },
     [sendSync],
   );
@@ -151,13 +172,43 @@ export function WatchTogetherProvider({ children }: { children: React.ReactNode 
         setEmbed({ active: false });
       }
       setStream({ active: true, source: { kind: 'torrent', input } });
+      setStreamPlayback(createLoadingPlayback(input.name));
     },
     [sendSync],
   );
 
   const stopStream = React.useCallback(() => {
     setStream({ active: false });
+    setStreamPlayback({ active: false });
   }, []);
+
+  const reportStreamPlayback = React.useCallback((state: StreamPlaybackState) => {
+    setStreamPlayback((current) => (samePlaybackState(current, state) ? current : state));
+  }, []);
+
+  const registerStreamController = React.useCallback(
+    (controller: (command: StreamControlCommand) => void | Promise<void>) => {
+      streamControllerRef.current = controller;
+      return () => {
+        if (streamControllerRef.current === controller) streamControllerRef.current = null;
+      };
+    },
+    [],
+  );
+
+  const controlStream = React.useCallback(
+    async (command: StreamControlCommand) => {
+      if (!streamPlayback.active) throw new Error('There is no active playback in this room.');
+      if (command.action === 'stop') {
+        stopStream();
+        return;
+      }
+      const controller = streamControllerRef.current;
+      if (!controller) throw new Error('The room player is not ready yet.');
+      await controller(command);
+    },
+    [stopStream, streamPlayback.active],
+  );
 
   const subscribe = React.useCallback((listener: (msg: WatchSyncMessage) => void) => {
     listenersRef.current.add(listener);
@@ -175,6 +226,10 @@ export function WatchTogetherProvider({ children }: { children: React.ReactNode 
       startStream,
       startTorrent,
       stopStream,
+      streamPlayback,
+      reportStreamPlayback,
+      registerStreamController,
+      controlStream,
       sendSync,
       subscribe,
     }),
@@ -186,12 +241,44 @@ export function WatchTogetherProvider({ children }: { children: React.ReactNode 
       startStream,
       startTorrent,
       stopStream,
+      streamPlayback,
+      reportStreamPlayback,
+      registerStreamController,
+      controlStream,
       sendSync,
       subscribe,
     ],
   );
 
   return <WatchTogetherContext.Provider value={value}>{children}</WatchTogetherContext.Provider>;
+}
+
+function createLoadingPlayback(name: string): StreamPlaybackState {
+  return {
+    active: true,
+    name,
+    phase: 'loading',
+    status: 'Preparing media…',
+    detail: name,
+    currentTime: 0,
+    duration: null,
+    paused: true,
+    canSeek: false,
+  };
+}
+
+function samePlaybackState(left: StreamPlaybackState, right: StreamPlaybackState): boolean {
+  if (!left.active || !right.active) return left.active === right.active;
+  return (
+    left.name === right.name &&
+    left.phase === right.phase &&
+    left.status === right.status &&
+    left.detail === right.detail &&
+    left.currentTime === right.currentTime &&
+    left.duration === right.duration &&
+    left.paused === right.paused &&
+    left.canSeek === right.canSeek
+  );
 }
 
 export function useWatchTogether() {

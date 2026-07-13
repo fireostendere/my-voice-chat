@@ -6,7 +6,6 @@ internal static class Program
 {
     private const int KeyDownMask = 0x8000;
     private const uint YesNoQuestion = 0x00000004 | 0x00000020 | 0x00010000;
-    private const uint ErrorMessage = 0x00000010 | 0x00010000;
     private const int DialogResultYes = 6;
 
     private static readonly Dictionary<string, int> NamedKeys = new(StringComparer.OrdinalIgnoreCase)
@@ -46,11 +45,6 @@ internal static class Program
         {
             return PromptForOrigin(args[1]);
         }
-        if (args.Length == 2 && args[0] == "--startup-error")
-        {
-            return ShowStartupError(args[1]);
-        }
-
         if (args.Length < 1 || !TryResolveVirtualKey(args[0], out var virtualKey))
         {
             Console.Error.WriteLine("Unsupported PTT key.");
@@ -142,17 +136,6 @@ internal static class Program
         return MessageBoxW(nint.Zero, message, "LiveKit Companion", YesNoQuestion) == DialogResultYes
             ? 0
             : 1;
-    }
-
-    private static int ShowStartupError(string logPath)
-    {
-        if (logPath.Length is < 1 or > 4096) return 2;
-
-        var message = "LiveKit Companion stopped during startup.\n\n" +
-                      "Open 'Status and diagnostics' from the Start menu for details.\n\n" +
-                      $"Log: {logPath}";
-        MessageBoxW(nint.Zero, message, "LiveKit Companion", ErrorMessage);
-        return 0;
     }
 
     private static bool TryResolveVirtualKey(string name, out int virtualKey)

@@ -1,4 +1,4 @@
-import type { TorrentInput } from './types';
+import type { StreamControlCommand, TorrentInput } from './types';
 
 const MAX_TORRENT_BYTES = 2 * 1024 * 1024;
 const MAX_MAGNET_LENGTH = 32 * 1024;
@@ -6,6 +6,11 @@ const MAX_MAGNET_LENGTH = 32 * 1024;
 export type CompanionTorrentCommand = {
   commandId: string;
   input: TorrentInput;
+};
+
+export type CompanionPlaybackCommand = {
+  commandId: string;
+  control: StreamControlCommand;
 };
 
 export function parseCompanionTorrentCommand(value: unknown): CompanionTorrentCommand | null {
@@ -34,6 +39,28 @@ export function parseCompanionTorrentCommand(value: unknown): CompanionTorrentCo
   const bytes = decodeTorrentFile(input.base64);
   if (!bytes) return null;
   return { commandId: message.commandId, input: { kind: 'torrent-file', bytes, name } };
+}
+
+export function parseCompanionPlaybackCommand(value: unknown): CompanionPlaybackCommand | null {
+  if (!value || typeof value !== 'object') return null;
+  const message = value as Record<string, unknown>;
+  if (message.type !== 'playback-control' || !isShortString(message.commandId, 128)) return null;
+
+  if (message.action === 'play' || message.action === 'pause' || message.action === 'stop') {
+    return { commandId: message.commandId, control: { action: message.action } };
+  }
+  if (
+    message.action === 'seek' &&
+    typeof message.currentTime === 'number' &&
+    Number.isFinite(message.currentTime) &&
+    message.currentTime >= 0
+  ) {
+    return {
+      commandId: message.commandId,
+      control: { action: 'seek', currentTime: message.currentTime },
+    };
+  }
+  return null;
 }
 
 function decodeTorrentFile(base64: string): Uint8Array | null {

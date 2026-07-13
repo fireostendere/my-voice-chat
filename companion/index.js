@@ -18,31 +18,36 @@
  * Run `npm run keys` to list supported key names.
  */
 
-const { WebSocketServer } = require('ws');
 const fs = require('node:fs');
 const path = require('node:path');
+const util = require('node:util');
+
+installFileLogger(process.env.COMPANION_LOG_FILE);
+
+const { WebSocketServer } = require('ws');
 const { CompanionUiServer } = require('./companion-ui');
 const { companionDataDir, createFileOriginApprover } = require('./origin-approval');
 const { PttKeyListener, SUPPORTED_KEYS, normalizePttKey } = require('./ptt-key-listener');
 const { RoomRegistry } = require('./room-registry');
 const { TorrentService } = require('./torrent-service');
 
+const DATA_DIR = companionDataDir();
+const PID_FILE = path.join(DATA_DIR, 'companion.pid');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.env');
+const STOP_FILE = path.join(DATA_DIR, 'stop-requested');
 const PORT = Number(process.env.PTT_PORT) || 7331;
-let pttKey = normalizePttKey(process.env.PTT_KEY || 'F8');
+let pttKey = loadPttKey();
 const TORRENT_PORT = Number(process.env.TORRENT_PORT) || PORT + 1;
 const UI_PORT = Number(process.env.COMPANION_UI_PORT) || PORT + 2;
 const ALLOWED_ORIGINS = (process.env.COMPANION_ORIGINS || process.env.PTT_ORIGINS || '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
-const DATA_DIR = companionDataDir();
-const PID_FILE = path.join(DATA_DIR, 'companion.pid');
-const SETTINGS_FILE = path.join(DATA_DIR, 'settings.env');
 const UI_URL = `http://127.0.0.1:${UI_PORT}/`;
 const PACKAGED_ICON_PATH = path.join(__dirname, 'ui', 'livekit.ico');
 const ICON_PATH = fs.existsSync(PACKAGED_ICON_PATH)
   ? PACKAGED_ICON_PATH
-  : path.join(__dirname, '..', 'public', 'favicon.ico');
+  : path.join(__dirname, 'assets', 'livekit-companion.ico');
 
 claimProcess();
 const originApprover = createFileOriginApprover({ configuredOrigins: ALLOWED_ORIGINS });
@@ -67,6 +72,14 @@ const torrentService = new TorrentService({ port: TORRENT_PORT });
 const roomRegistry = new RoomRegistry();
 let talking = false;
 let shuttingDown = false;
+const stopRequestTimer = setInterval(() => {
+  if (!fs.existsSync(STOP_FILE)) return;
+  try {
+    fs.unlinkSync(STOP_FILE);
+  } catch {}
+  void shutdown(0);
+}, 250);
+stopRequestTimer.unref();
 
 function broadcast(state) {
   const payload = JSON.stringify({ type: 'ptt', state });
@@ -112,6 +125,10 @@ const uiServer = new CompanionUiServer({
   port: UI_PORT,
   getPttKey: () => pttKey,
   setPttKey: (value) => {
+    if (talking) {
+      talking = false;
+      broadcast('up');
+    }
     pttKey = keyboard.setKey(value);
     fs.writeFileSync(SETTINGS_FILE, `PTT_KEY=${pttKey}\r\n`, 'ascii');
     return pttKey;
@@ -132,6 +149,7 @@ process.on('exit', releaseProcess);
 async function shutdown(exitCode) {
   if (shuttingDown) return;
   shuttingDown = true;
+  clearInterval(stopRequestTimer);
   const forceExitTimer = setTimeout(() => process.exit(exitCode), 1500);
   forceExitTimer.unref();
   console.log('\n[companion] shutting down');
@@ -163,4 +181,49 @@ function releaseProcess() {
   try {
     if (Number(fs.readFileSync(PID_FILE, 'utf8')) === process.pid) fs.unlinkSync(PID_FILE);
   } catch {}
+}
+
+function loadPttKey() {
+  const environmentKey = process.env.PTT_KEY;
+  if (environmentKey) return normalizePttKey(environmentKey);
+  try {
+    const settings = fs.readFileSync(SETTINGS_FILE, 'ascii');
+    const storedKey = settings
+      .split(/\r?\n/)
+      .map((line) => line.split('=', 2))
+      .find(([name]) => name?.trim().toUpperCase() === 'PTT_KEY')?.[1];
+    if (storedKey) return normalizePttKey(storedKey);
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.warn('[companion] could not load saved PTT key:', error.message);
+    }
+  }
+  return 'F8';
+}
+
+function installFileLogger(logFile) {
+  if (!logFile) return;
+  try {
+    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    fs.appendFileSync(logFile, `\n[${new Date().toISOString()}] Starting LiveKit Companion\n`);
+  } catch {
+    return;
+  }
+
+  const append = (level, values) => {
+    try {
+      fs.appendFileSync(
+        logFile,
+        `[${new Date().toISOString()}] ${level} ${util.format(...values)}\n`,
+      );
+    } catch {}
+  };
+  for (const level of ['log', 'warn', 'error']) {
+    const original = console[level].bind(console);
+    console[level] = (...values) => {
+      original(...values);
+      append(level.toUpperCase(), values);
+    };
+  }
+  process.on('uncaughtExceptionMonitor', (error) => append('FATAL', [error.stack || error]));
 }
