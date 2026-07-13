@@ -63,6 +63,39 @@ jobs:
           & $compiler "/DAppVersion=$version" companion/installer/companion.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Smoke test installer, startup, and uninstaller
+        shell: pwsh
+        run: |
+          $installer = (Resolve-Path 'companion/dist/LiveKitCompanionSetup.exe').Path
+          $installDir = Join-Path $env:RUNNER_TEMP 'LiveKitCompanion-smoke'
+          $install = Start-Process $installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$installDir" -PassThru -Wait
+          if ($install.ExitCode -ne 0) { throw "Installer exited with code $($install.ExitCode)" }
+
+          $uninstaller = Join-Path $installDir 'unins000.exe'
+          $startScript = Join-Path $installDir 'start-companion.cmd'
+          $stopScript = Join-Path $installDir 'stop-companion.cmd'
+          if (-not (Test-Path $uninstaller)) { throw "Uninstaller is missing: $uninstaller" }
+          if (-not (Test-Path $startScript)) { throw "Start script is missing: $startScript" }
+
+          Start-Process 'cmd.exe' -ArgumentList '/d', '/c', "`"$startScript`"" -WindowStyle Hidden
+          Start-Sleep -Seconds 4
+          $dataDir = Join-Path $env:LOCALAPPDATA 'LiveKitCompanion'
+          $pidFile = Join-Path $dataDir 'companion.pid'
+          $logFile = Join-Path $dataDir 'companion.log'
+          if (-not (Test-Path $pidFile)) {
+            if (Test-Path $logFile) { Get-Content $logFile }
+            throw "Companion did not create its PID file."
+          }
+          $companionPid = [int](Get-Content $pidFile -Raw).Trim()
+          if (-not (Get-Process -Id $companionPid -ErrorAction SilentlyContinue)) {
+            if (Test-Path $logFile) { Get-Content $logFile }
+            throw "Companion process $companionPid is not running."
+          }
+
+          & 'cmd.exe' '/d' '/c' "`"$stopScript`""
+          $uninstall = Start-Process $uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru -Wait
+          if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited with code $($uninstall.ExitCode)" }
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:

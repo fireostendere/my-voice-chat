@@ -1,0 +1,10 @@
+LiveKit Companion runs in the background and does not open a main window.
+
+Use the LiveKit Companion shortcuts in the Start menu to:
+
+* check whether it is running and view the latest startup log;
+* configure the push-to-talk key;
+* stop the background process;
+* uninstall the application.
+
+You can also uninstall it from Windows Settings > Apps > Installed apps > LiveKit Companion.

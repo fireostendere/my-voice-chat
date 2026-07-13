@@ -221,7 +221,10 @@ The PTT helper polls only the configured Windows virtual key. It replaces the pr
 third-party global keyboard hook and does not enumerate other keys or collect typed
 characters. The Node process converts only `DOWN`/`UP` transitions into PTT WebSocket
 messages. The same helper displays the Windows origin-approval dialog without invoking
-PowerShell or evaluating a generated script.
+PowerShell or evaluating a generated script. Startup failures produce a visible native
+dialog and remain available through the Start menu diagnostics shortcut. The release
+workflow smoke-tests installation, background startup, PID creation, and uninstallation
+on Windows before publishing the EXE.
 
 On first contact from a remote browser origin, the companion displays a native Windows
 approval dialog. Approved origins are persisted per user and receive both PTT and
