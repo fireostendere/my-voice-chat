@@ -31,7 +31,20 @@ socket disconnects. LiveKit receives only the encoded real-time media stream.
 The torrent service itself is Node-based, but the current companion also initializes a
 Windows keyboard hook, so other operating systems are not supported yet.
 
+## One-click Windows install
+
+Use **Download companion** on the voice-chat home page or in **Кинотеатр → Торрент**,
+then run `livekit-companion-setup.cmd`. The installer downloads a portable Node.js LTS
+runtime, installs to `%LOCALAPPDATA%\LiveKitCompanion`, trusts the voice-chat origin it
+was downloaded from, creates a desktop shortcut, and starts the companion. It does not
+require a system-wide Node.js installation.
+
+The generated folder also contains `learn-key.cmd`. Run it to discover a different key
+name, then edit `PTT_KEY` in `start-companion.cmd`; the default is `F8`.
+
 ## Setup
+
+For development or a manual installation:
 
 ```bash
 cd companion

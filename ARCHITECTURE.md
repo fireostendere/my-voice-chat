@@ -9,9 +9,10 @@ the structure below reflects this repository's code.
 
 The app is a **Next.js 15 (App Router)** front end. It does not own any media
 infrastructure — all audio/video routing is done by a **LiveKit server** (LiveKit
-Cloud or self-hosted). The Next.js server side is intentionally tiny: three Route
-Handlers that (a) mint a participant access token and (b) start/stop recording.
-Everything else is a browser client that talks WebRTC directly to LiveKit.
+Cloud or self-hosted). The Next.js server side is intentionally tiny: four Route
+Handlers that mint a participant access token, start/stop recording, and generate the
+companion installer. Everything else is a browser client that talks WebRTC directly
+to LiveKit.
 
 ```
                           ┌──────────────────────────────────────────┐
@@ -28,7 +29,8 @@ Everything else is a browser client that talks WebRTC directly to LiveKit.
         │  Next.js Route Handlers (server) │     │     LiveKit server        │
         │  • /api/connection-details       │     │  (Cloud or self-hosted)   │
         │  • /api/record/start|stop        │ ──► │  • SFU / rooms            │
-        │     (uses livekit-server-sdk)    │  2. │  • Egress → S3            │
+        │  • /api/companion/download       │     │  • Egress → S3            │
+        │  (recording uses server SDK)     │  2. │                          │
         └─────────────────────────────────┘ Egress└──────────────────────────┘
 ```
 
@@ -49,6 +51,7 @@ Everything else is a browser client that talks WebRTC directly to LiveKit.
 | `app/api/connection-details/route.ts`      | server | `GET` → mints a short-lived participant JWT for `{roomName, participantName}`, optionally region-routed.                                                   |
 | `app/api/record/start/route.ts`            | server | `GET` → starts a Room Composite Egress to S3 (speaker layout, mp4).                                                                                        |
 | `app/api/record/stop/route.ts`             | server | `GET` → stops all active egresses for the room.                                                                                                            |
+| `app/api/companion/download/route.ts`      | server | `GET` → generates a Windows companion installer bound to the request's trusted public origin.                                                              |
 
 ## `lib/` modules
 
@@ -206,6 +209,13 @@ to Next.js but can only discover WebRTC-compatible WebTorrent peers and web seed
 both modes viewers do not join the swarm: LiveKit receives and forwards only the
 captured encoded media tracks.
 
+The home page and torrent source panel link to `/api/companion/download`. The route
+uses the public request/reverse-proxy origin to generate a `.cmd` installer that places
+the companion and a portable Node.js LTS runtime under `%LOCALAPPDATA%`, creates a
+desktop launcher, and configures `COMPANION_ORIGINS` for that voice-chat deployment.
+It downloads source and runtime directly to the user's PC; the Next.js server does not
+build or store a per-user binary.
+
 This requires a browser with `HTMLMediaElement.captureStream()` and a file codec that
 the browser can decode. Direct/HLS sources must also satisfy the remote origin's CORS
 and media-access policy. YouTube mode is effectively Chromium-only while Firefox lacks
@@ -213,7 +223,7 @@ credentialless iframe support under COEP.
 
 ## Build & tooling
 
-- **Next.js** `15.2.8`, **React** `18.3.1`, App Router, `reactStrictMode: false`,
+- **Next.js** `15.5.16`, **React** `18.3.1`, App Router, `reactStrictMode: false`,
   `productionBrowserSourceMaps: true`, `source-map-loader` for `.mjs`.
 - **TypeScript** strict, `moduleResolution: Bundler`, path alias `@/* → ./*`.
 - **ESLint** `next/core-web-vitals`; **Prettier** (LF, single quotes, width 100).

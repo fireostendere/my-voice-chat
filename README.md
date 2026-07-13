@@ -157,6 +157,10 @@ CI runs `lint`, `format:check`, and `test` on every push and pull request.
 | `NEXT_PUBLIC_COMPANION_WS_URL`                                 | Local companion URL for PTT and standard BitTorrent peers.                                |
 | `NEXT_PUBLIC_PTT_WS_URL`                                       | Push-to-talk companion URL (default `ws://127.0.0.1:7331`; empty disables it).            |
 
+The companion download endpoint also accepts the server-only `COMPANION_PUBLIC_ORIGIN`
+override for unusual reverse proxies and `COMPANION_ARCHIVE_URL` for a custom HTTPS
+source archive.
+
 ## Configuring a room via URL
 
 A managed room URL is `/rooms/<roomName>` and accepts:
@@ -211,6 +215,11 @@ requires a `credentialless` iframe, which Firefox does not currently support.
 Browser WebTorrent can only reach WebRTC-capable peers and web seeds. Install and run
 the companion when ordinary public magnet links must work. Torrent playback still
 depends on the browser being able to decode the selected (largest) video file.
+
+The home page and the room's torrent tab provide a **Download companion** button. It
+generates a Windows installer tied to the current site's origin, downloads a portable
+Node.js LTS runtime, installs under `%LOCALAPPDATA%\LiveKitCompanion`, and creates a
+desktop shortcut. A separate global Node.js installation is not required.
 
 When the web app is hosted outside localhost, set its exact origin in
 `COMPANION_ORIGINS` before starting the companion. Otherwise torrent capability is

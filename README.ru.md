@@ -143,6 +143,13 @@ participant token. Этот режим не запрашивает токен ч
 | `NEXT_PUBLIC_DATADOG_CLIENT_TOKEN`    | Client token Datadog. Нужен вместе с `NEXT_PUBLIC_DATADOG_SITE`.     |
 | `NEXT_PUBLIC_DATADOG_SITE`            | Site Datadog.                                                        |
 
+Для установщика companion доступны две server-only настройки:
+
+| Переменная                | Назначение                                                                |
+| ------------------------- | ------------------------------------------------------------------------- |
+| `COMPANION_PUBLIC_ORIGIN` | Явный origin войсчата, если reverse proxy не передаёт корректные headers. |
+| `COMPANION_ARCHIVE_URL`   | Другой HTTPS-архив исходников companion вместо GitHub `main`.             |
+
 Для записи также нужны `S3_KEY_ID`, `S3_KEY_SECRET`, `S3_ENDPOINT`, `S3_BUCKET` и
 `S3_REGION`. Публичные переменные `NEXT_PUBLIC_*` встраиваются во время сборки,
 поэтому задавайте их до `pnpm build`.
@@ -174,6 +181,20 @@ seeds, поэтому для обычных публичных magnet-ссыло
 приложении. Companion добавляет глобальную кнопку разговора и поддержку обычных
 BitTorrent-пиров для кинотеатра:
 
+На главной странице или во вкладке **Кинотеатр → Торрент** нажмите **Скачать
+companion** и запустите полученный `livekit-companion-setup.cmd`. Установщик:
+
+- скачивает portable Node.js LTS, поэтому заранее устанавливать Node.js не нужно;
+- ставит приложение в `%LOCALAPPDATA%\LiveKitCompanion`;
+- автоматически разрешает origin того войсчата, откуда он был скачан;
+- создаёт ярлык **LiveKit Companion** на рабочем столе и сразу запускает приложение.
+
+По умолчанию рация использует `F8`. Для поиска другого имени клавиши запустите
+`learn-key.cmd` из папки приложения, затем измените `PTT_KEY` в
+`start-companion.cmd`.
+
+Ручная установка для разработки остаётся доступна:
+
 ```powershell
 cd companion
 npm install
@@ -186,7 +207,7 @@ $env:PTT_KEY="F8"; npm start
 обнаруживает тот же процесс. Подробности находятся в
 [`companion/README.md`](./companion/README.md).
 
-Если сайт открыт не с `localhost`, перед запуском companion укажите его точный origin:
+При ручном запуске с сайта не на `localhost` укажите его точный origin:
 
 ```powershell
 $env:COMPANION_ORIGINS="https://ваш-чат.example.com"; npm start

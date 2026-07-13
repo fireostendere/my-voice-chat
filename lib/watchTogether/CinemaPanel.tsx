@@ -4,6 +4,7 @@ import { useWatchTogether } from './WatchTogetherContext';
 import { parseVideoUrl } from './parseVideoUrl';
 import { isMagnetUri } from './torrentSource';
 import type { TorrentInput } from './types';
+import { CompanionDownloadLink } from '../CompanionDownloadLink';
 
 type Tab = 'link' | 'file' | 'torrent';
 
@@ -298,6 +299,13 @@ export function CinemaPanel() {
                   <span>2</span>
                   <strong>WebTorrent</strong>
                   <i>fallback в браузере</i>
+                </div>
+                <div className="lk-cinema-companion-download">
+                  <div>
+                    <strong>Нет companion?</strong>
+                    <span>Установщик сам добавит portable Node и настроит этот войсчат.</span>
+                  </div>
+                  <CompanionDownloadLink compact />
                 </div>
                 <p className="lk-cinema-hint">
                   Сначала используется локальный companion. Если он не установлен или не запущен,

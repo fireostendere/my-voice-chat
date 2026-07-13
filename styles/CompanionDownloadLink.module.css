@@ -1,0 +1,70 @@
+.link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  min-height: 3.2rem;
+  padding: 0.55rem 1rem;
+  color: #1b0e0a;
+  text-decoration: none;
+  background: linear-gradient(135deg, #ffb15c 0%, #ff6352 58%, #f34438 100%);
+  border: 1px solid rgba(255, 210, 163, 0.55);
+  border-radius: 0.65rem;
+  box-shadow: 0 0.6rem 1.5rem rgba(243, 68, 56, 0.22);
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease,
+    filter 150ms ease;
+}
+
+.link:hover {
+  color: #1b0e0a;
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+  box-shadow: 0 0.8rem 1.8rem rgba(243, 68, 56, 0.3);
+}
+
+.link:focus-visible {
+  outline: 2px solid #fff2e5;
+  outline-offset: 3px;
+}
+
+.link svg {
+  width: 1.3rem;
+  height: 1.3rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.link span {
+  display: grid;
+  gap: 0.05rem;
+  text-align: left;
+}
+
+.link small {
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  opacity: 0.62;
+}
+
+.link strong {
+  font-size: 0.9rem;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.compact {
+  min-height: 2.7rem;
+  padding: 0.45rem 0.8rem;
+  box-shadow: none;
+}
+
+.compact small {
+  display: none;
+}

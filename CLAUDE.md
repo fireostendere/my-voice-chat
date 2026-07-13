@@ -97,6 +97,8 @@ Public (`NEXT_PUBLIC_*`, shipped to the browser):
 | `NEXT_PUBLIC_DATADOG_CLIENT_TOKEN` / `NEXT_PUBLIC_DATADOG_SITE` | unset                     | If both set, LiveKit client logs are forwarded to Datadog (`lib/Debug.tsx`).                                     |
 | `NEXT_PUBLIC_COMPANION_WS_URL`                                  | `ws://127.0.0.1:7331`     | Local companion endpoint for torrent cinema and, unless overridden, PTT.                                         |
 | `NEXT_PUBLIC_PTT_WS_URL`                                        | companion URL             | Override the PTT endpoint. Set empty to disable only global push-to-talk.                                        |
+| `COMPANION_PUBLIC_ORIGIN`                                       | inferred request origin   | Server-only origin embedded into the downloadable companion installer.                                           |
+| `COMPANION_ARCHIVE_URL`                                         | GitHub `main` archive     | Server-only HTTPS source archive used by the companion installer.                                                |
 
 ## Per-room URL parameters
 
