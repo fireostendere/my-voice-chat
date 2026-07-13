@@ -225,6 +225,11 @@ The packaged PTT helper is built from this repository and checks only the config
 virtual key. It replaces the previous third-party global keyboard hook; it does not
 capture typed text or observe unrelated keys.
 
+The companion runs in the background and does not open a main window. Use **LiveKit
+Companion → Status and diagnostics** in the Start menu to confirm that it is running
+and read the latest startup log. Remove it with **Uninstall LiveKit Companion** in the
+same menu or from **Windows Settings → Apps → Installed apps**.
+
 On the first connection from a remote voice-chat origin, Windows asks the user to
 approve that site. The decision is stored locally and gates both PTT and torrent
 commands. Managed manual installations can still set an exact `COMPANION_ORIGINS`

@@ -115,7 +115,7 @@ function claimProcess() {
     if (existingPid && existingPid !== process.pid) {
       process.kill(existingPid, 0);
       console.error(`[companion] already running with PID ${existingPid}`);
-      process.exit(1);
+      process.exit(0);
     }
   } catch {}
   fs.writeFileSync(PID_FILE, String(process.pid), 'utf8');

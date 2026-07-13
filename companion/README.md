@@ -33,12 +33,16 @@ Windows API, so other operating systems are not supported by the packaged app ye
 
 ## One-click Windows install
 
-Use **Download companion** on the voice-chat home page or in **Кинотеатр → Торрент**,
+Use **Download companion** on the voice-chat home page or in the room's top toolbar,
 then run `LiveKitCompanionSetup.exe`. The installer already contains Node.js and all
 dependencies, installs per-user to `%LOCALAPPDATA%\Programs\LiveKitCompanion`, creates
 Start menu and desktop shortcuts, can enable startup with Windows, and starts the
 companion in the background. It does not require a system-wide Node.js installation or
 administrator rights.
+
+The companion has no main window. Open **LiveKit Companion → Status and diagnostics**
+from the Start menu to see its PID and latest startup log. Use **Uninstall LiveKit
+Companion** there or **Windows Settings → Apps → Installed apps** to remove it.
 
 The first time a deployed voice-chat site connects, Windows displays an approval
 dialog. Verify its origin and choose **Yes**. The companion remembers approved origins

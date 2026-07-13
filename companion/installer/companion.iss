@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.2.0"
+  #define AppVersion "0.2.1"
 #endif
 
 #define AppName "LiveKit Companion"
@@ -28,8 +28,11 @@ WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
 SetupLogging=yes
+InfoAfterFile=after-install.txt
+CreateUninstallRegKey=yes
+Uninstallable=yes
 UninstallDisplayName={#AppName}
-UninstallDisplayIcon={app}\runtime\node.exe
+UninstallDisplayIcon={uninstallexe}
 VersionInfoVersion={#AppVersion}
 VersionInfoCompany={#AppPublisher}
 VersionInfoDescription=Local companion for LiveKit voice chat
@@ -57,16 +60,21 @@ Source: "..\package.json"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\node_modules\*"; DestDir: "{app}\app\node_modules"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "start-companion.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "start-companion.vbs"; DestDir: "{app}"; Flags: ignoreversion
+Source: "launch-companion.vbs"; DestDir: "{app}"; Flags: ignoreversion
 Source: "stop-companion.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "status-companion.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "uninstall-companion.cmd"; DestDir: "{app}"; DestName: "Uninstall LiveKit Companion.cmd"; Flags: ignoreversion
 Source: "configure-key.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "configure-key.js"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\start-companion.vbs"""; WorkingDir: "{app}"
+Name: "{group}\{#AppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\launch-companion.vbs"""; WorkingDir: "{app}"
 Name: "{group}\Configure PTT key"; Filename: "{app}\configure-key.cmd"; WorkingDir: "{app}"
+Name: "{group}\Status and diagnostics"; Filename: "{app}\status-companion.cmd"; WorkingDir: "{app}"
 Name: "{group}\Stop companion"; Filename: "{app}\stop-companion.cmd"; WorkingDir: "{app}"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\start-companion.vbs"""; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{userprograms}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#AppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\launch-companion.vbs"""; WorkingDir: "{app}"; Tasks: desktopicon
 Name: "{userstartup}\{#AppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\start-companion.vbs"""; WorkingDir: "{app}"; Tasks: startup
 
 [Run]
