@@ -25,7 +25,7 @@ export function StreamHostController() {
     audio?: LocalTrackPublication;
   }>({});
   const [error, setError] = React.useState<string | null>(null);
-  const [status, setStatus] = React.useState('Подготовка файла…');
+  const [status, setStatus] = React.useState('Preparing file…');
   const [detail, setDetail] = React.useState('');
   const streamSource = stream.active ? stream.source : null;
 
@@ -33,7 +33,7 @@ export function StreamHostController() {
     if (!streamSource || !videoRef.current) return;
     const video = videoRef.current;
     setError(null);
-    setStatus('Подготовка файла…');
+    setStatus('Preparing file…');
     setDetail(streamSource.kind === 'file' ? streamSource.file.name : streamSource.input.name);
 
     let cancelled = false;
@@ -66,7 +66,7 @@ export function StreamHostController() {
         await waitForMetadata(video);
         if (cancelled) return;
 
-        setStatus('Запуск воспроизведения…');
+        setStatus('Starting playback…');
         setDetail(sourceName);
         await video.play().catch(() => {
           /* autoplay may be blocked, but captureStream still works */
@@ -77,14 +77,14 @@ export function StreamHostController() {
           ? (video as any).captureStream()
           : (video as any).mozCaptureStream?.();
         if (!mediaStream) {
-          throw new Error('Браузер не поддерживает трансляцию локального видео (captureStream).');
+          throw new Error('This browser cannot stream local video with captureStream().');
         }
 
         const videoTrack = mediaStream.getVideoTracks()[0];
         const audioTrack = mediaStream.getAudioTracks()[0];
 
         if (videoTrack) {
-          setStatus('Публикация видео в комнату…');
+          setStatus('Publishing video to the room…');
           const lvt = new LocalVideoTrack(videoTrack, undefined, true);
           const pub = await room.localParticipant.publishTrack(lvt, {
             source: Track.Source.ScreenShare,
@@ -101,7 +101,7 @@ export function StreamHostController() {
           publishedRef.current.video = pub;
         }
         if (audioTrack) {
-          setStatus('Подключение звука…');
+          setStatus('Connecting audio…');
           const lat = new LocalAudioTrack(audioTrack, undefined, true);
           const pub = await room.localParticipant.publishTrack(lat, {
             source: Track.Source.ScreenShareAudio,
@@ -112,8 +112,8 @@ export function StreamHostController() {
           }
           publishedRef.current.audio = pub;
         }
-        if (!videoTrack) throw new Error('В выбранном файле не найден видеопоток.');
-        setStatus(torrentEngine ? `В эфире · ${engineLabel(torrentEngine)}` : 'В эфире');
+        if (!videoTrack) throw new Error('The selected file does not contain a video track.');
+        setStatus(torrentEngine ? `Live · ${engineLabel(torrentEngine)}` : 'Live');
         setDetail(sourceName);
       } catch (err: any) {
         if (!cancelled && err?.name !== 'AbortError') setError(err?.message ?? String(err));
@@ -146,11 +146,11 @@ export function StreamHostController() {
       <video ref={videoRef} className="lk-watch-together-host-video" controls playsInline />
       <div className="lk-watch-together-host-controls">
         <span className="lk-watch-together-host-label">
-          <strong>{error ? 'Ошибка трансляции' : status}</strong>
+          <strong>{error ? 'Stream error' : status}</strong>
           <span>{error ?? detail}</span>
         </span>
         <button type="button" className="lk-button" onClick={stopStream}>
-          Завершить
+          Stop
         </button>
       </div>
     </div>
@@ -166,7 +166,7 @@ function waitForMetadata(video: HTMLVideoElement): Promise<void> {
     };
     const onError = () => {
       cleanup();
-      reject(new Error('Не удалось открыть видеопоток торрента.'));
+      reject(new Error('Could not open the torrent video stream.'));
     };
     const cleanup = () => {
       video.removeEventListener('loadedmetadata', onLoaded);
@@ -184,14 +184,14 @@ function updateTorrentStatus(
 ) {
   const engine = engineLabel(torrentStatus.engine);
   if (torrentStatus.phase === 'error') {
-    setStatus(`Ошибка · ${engine}`);
+    setStatus(`Error · ${engine}`);
   } else if (torrentStatus.phase === 'ready') {
-    setStatus(`Буфер готов · ${engine}`);
+    setStatus(`Buffer ready · ${engine}`);
   } else {
-    setStatus(`Загрузка · ${engine}`);
+    setStatus(`Downloading · ${engine}`);
   }
   const metrics = [
-    torrentStatus.peers !== undefined ? `${torrentStatus.peers} пиров` : null,
+    torrentStatus.peers !== undefined ? `${torrentStatus.peers} peers` : null,
     torrentStatus.downloadSpeed !== undefined
       ? formatTorrentSpeed(torrentStatus.downloadSpeed)
       : null,

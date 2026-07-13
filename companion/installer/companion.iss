@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #define AppVersion "0.2.0"
 #endif
 
 #define AppName "LiveKit Companion"
@@ -38,19 +38,19 @@ VersionInfoProductVersion={#AppVersion}
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
-Name: "startup"; Description: "Запускать companion при входе в Windows"; GroupDescription: "Автозапуск:"; Flags: checkedonce
+Name: "startup"; Description: "Start companion when signing in to Windows"; GroupDescription: "Startup:"; Flags: checkedonce
 
 [Files]
 Source: "build\node.exe"; DestDir: "{app}\runtime"; Flags: ignoreversion
 Source: "build\LICENSE-node.txt"; DestDir: "{app}\runtime"; Flags: ignoreversion
+Source: "build\ptt-helper\LiveKitCompanionNative.exe"; DestDir: "{app}\app\bin"; Flags: ignoreversion
 Source: "..\index.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\origin-approval.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\origin-core.js"; DestDir: "{app}\app"; Flags: ignoreversion
-Source: "..\ptt-core.js"; DestDir: "{app}\app"; Flags: ignoreversion
+Source: "..\ptt-key-listener.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\torrent-core.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\torrent-service.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\package.json"; DestDir: "{app}\app"; Flags: ignoreversion
@@ -58,21 +58,27 @@ Source: "..\node_modules\*"; DestDir: "{app}\app\node_modules"; Flags: ignorever
 Source: "start-companion.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "start-companion.vbs"; DestDir: "{app}"; Flags: ignoreversion
 Source: "stop-companion.cmd"; DestDir: "{app}"; Flags: ignoreversion
-Source: "learn-key.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "configure-key.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "configure-key.js"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\start-companion.vbs"""; WorkingDir: "{app}"
-Name: "{group}\Настроить клавишу рации"; Filename: "{app}\learn-key.cmd"; WorkingDir: "{app}"
-Name: "{group}\Остановить companion"; Filename: "{app}\stop-companion.cmd"; WorkingDir: "{app}"
-Name: "{group}\Удалить {#AppName}"; Filename: "{uninstallexe}"
+Name: "{group}\Configure PTT key"; Filename: "{app}\configure-key.cmd"; WorkingDir: "{app}"
+Name: "{group}\Stop companion"; Filename: "{app}\stop-companion.cmd"; WorkingDir: "{app}"
+Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\start-companion.vbs"""; WorkingDir: "{app}"; Tasks: desktopicon
 Name: "{userstartup}\{#AppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\start-companion.vbs"""; WorkingDir: "{app}"; Tasks: startup
 
 [Run]
-Filename: "{sys}\wscript.exe"; Parameters: """{app}\start-companion.vbs"""; Description: "Запустить {#AppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{sys}\wscript.exe"; Parameters: """{app}\start-companion.vbs"""; Description: "Start {#AppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "{app}\stop-companion.cmd"; RunOnceId: "StopCompanion"; Flags: runhidden waituntilterminated skipifdoesntexist
+
+[InstallDelete]
+Type: filesandordirs; Name: "{app}\app"
+Type: filesandordirs; Name: "{app}\runtime"
+Type: files; Name: "{app}\learn-key.cmd"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{localappdata}\LiveKitCompanion"

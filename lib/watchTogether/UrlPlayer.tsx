@@ -39,7 +39,7 @@ export function UrlPlayer({ src, hostIdentity, isHost, sendSync, subscribe }: Pr
     if (isHls && video.canPlayType('application/vnd.apple.mpegurl') === '') {
       if (!Hls.isSupported()) {
         setLoading(false);
-        setError('Этот браузер не поддерживает HLS-воспроизведение.');
+        setError('This browser does not support HLS playback.');
         return;
       }
       hls = new Hls({
@@ -55,7 +55,7 @@ export function UrlPlayer({ src, hostIdentity, isHost, sendSync, subscribe }: Pr
           hls?.recoverMediaError();
         } else {
           setLoading(false);
-          setError(`Не удалось воспроизвести HLS: ${data.details}`);
+          setError(`Could not play HLS: ${data.details}`);
         }
       });
       hls.loadSource(src);
@@ -146,11 +146,11 @@ export function UrlPlayer({ src, hostIdentity, isHost, sendSync, subscribe }: Pr
         onWaiting={() => setLoading(true)}
         onError={() => {
           setLoading(false);
-          setError('Видео не загрузилось. Проверьте формат ссылки, CORS и доступность файла.');
+          setError('The video did not load. Check the URL format, CORS, and file availability.');
         }}
       />
       {!isHost && needsGesture && <GestureOverlay onClick={tryPlay} />}
-      {loading && !error && <div className="lk-watch-together-status">Загрузка видео…</div>}
+      {loading && !error && <div className="lk-watch-together-status">Loading video…</div>}
       {error && <div className="lk-watch-together-status lk-watch-together-error">{error}</div>}
     </div>
   );

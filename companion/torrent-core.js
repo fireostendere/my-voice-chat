@@ -19,25 +19,25 @@ function selectLargestVideoFile(files) {
 
 function parseTorrentInput(input) {
   if (!input || typeof input !== 'object') {
-    throw new Error('Не указан magnet или файл .torrent.');
+    throw new Error('No magnet link or .torrent file was provided.');
   }
   if (input.kind === 'magnet') {
     if (!isMagnetUri(input.magnet) || input.magnet.length > MAX_MAGNET_LENGTH) {
-      throw new Error('Некорректная magnet-ссылка.');
+      throw new Error('Invalid magnet link.');
     }
     return input.magnet.trim();
   }
   if (input.kind === 'torrent-file') {
     if (typeof input.base64 !== 'string' || input.base64.length === 0) {
-      throw new Error('Файл .torrent пуст.');
+      throw new Error('The .torrent file is empty.');
     }
     const bytes = Buffer.from(input.base64, 'base64');
     if (bytes.length === 0 || bytes.length > MAX_TORRENT_FILE_BYTES) {
-      throw new Error('Файл .torrent превышает лимит 2 МБ.');
+      throw new Error('The .torrent file exceeds the 2 MB limit.');
     }
     return bytes;
   }
-  throw new Error('Неизвестный формат torrent-источника.');
+  throw new Error('Unknown torrent source format.');
 }
 
 module.exports = {

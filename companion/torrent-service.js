@@ -91,7 +91,7 @@ class TorrentService {
     await listen(server, this.port);
     if (this.active !== active) return;
 
-    this.sendStatus(active, 'metadata', 'Получаю метаданные и ищу пиры…');
+    this.sendStatus(active, 'metadata', 'Fetching metadata and looking for peers…');
     const torrent = client.add(
       torrentId,
       { path: sessionDir, destroyStoreOnDestroy: true },
@@ -103,7 +103,7 @@ class TorrentService {
     });
     torrent.on('noPeers', () => {
       if (this.active === active) {
-        this.sendStatus(active, 'buffering', 'Пиры пока не найдены…');
+        this.sendStatus(active, 'buffering', 'No peers found yet…');
       }
     });
   }
@@ -112,7 +112,7 @@ class TorrentService {
     if (this.active !== active) return;
     const selected = selectLargestVideoFile(torrent.files);
     if (!selected) {
-      this.sendError(active.owner, active.requestId, new Error('В торренте нет видеофайла.'));
+      this.sendError(active.owner, active.requestId, new Error('The torrent contains no video file.'));
       this.operation = this.operation.then(() => this.stop());
       return;
     }
@@ -185,7 +185,7 @@ class TorrentService {
 
 function validRequestId(value) {
   if (typeof value !== 'string' || value.length < 1 || value.length > 128) {
-    throw new Error('Некорректный requestId.');
+    throw new Error('Invalid requestId.');
   }
   return value;
 }

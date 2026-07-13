@@ -37,22 +37,22 @@ export function EmbedTile() {
       <div className="lk-watch-together-overlay">
         <span className="lk-watch-together-source">
           <span className="lk-cinema-live-dot" />
-          {embed.kind === 'youtube' ? 'YouTube' : 'Прямая трансляция'}
+          {embed.kind === 'youtube' ? 'YouTube' : 'Direct stream'}
         </span>
         <span className="lk-watch-together-role">
-          {embed.isHost ? 'Вы управляете просмотром' : `Ведущий: ${embed.hostIdentity}`}
+          {embed.isHost ? 'You control playback' : `Host: ${embed.hostIdentity}`}
         </span>
         <button
           type="button"
           className="lk-button lk-watch-together-action"
           onClick={enterFullscreen}
-          title="На весь экран"
+          title="Fullscreen"
         >
           ⛶
         </button>
         {embed.isHost && (
           <button type="button" className="lk-button lk-watch-together-stop" onClick={stopEmbed}>
-            Завершить
+            Stop
           </button>
         )}
       </div>

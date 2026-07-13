@@ -26,7 +26,7 @@ function loadYouTubeApi(): Promise<any> {
     tag.src = 'https://www.youtube.com/iframe_api';
     tag.onerror = () => {
       ytApiPromise = null;
-      reject(new Error('Не удалось загрузить YouTube IFrame API'));
+      reject(new Error('Could not load the YouTube IFrame API'));
     };
     document.head.appendChild(tag);
   });
@@ -188,10 +188,10 @@ export function YouTubePlayer({ videoId, hostIdentity, isHost, sendSync, subscri
     <div className="lk-watch-together-yt-wrap">
       <div ref={containerRef} className="lk-watch-together-yt-frame" />
       {needsGesture && <GestureOverlay onClick={handleGesture} delayed />}
-      {!ready && !error && <div className="lk-watch-together-status">Подключение к YouTube…</div>}
+      {!ready && !error && <div className="lk-watch-together-status">Connecting to YouTube…</div>}
       {error && (
         <div className="lk-watch-together-status lk-watch-together-error">
-          Ошибка YouTube: {error}
+          YouTube error: {error}
         </div>
       )}
     </div>

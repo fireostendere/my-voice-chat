@@ -24,12 +24,12 @@ socket disconnects. LiveKit receives only the encoded real-time media stream.
 
 ## Requirements
 
-- Windows 10 or newer for the EXE installer and global keyboard hook.
+- Windows 10 or newer for the EXE installer and global PTT key.
 - Node.js 18 or newer only for a manual/development installation.
 - Chrome or Edge is recommended for localhost media capture.
 
-The torrent service itself is Node-based, but the current companion also initializes a
-Windows keyboard hook, so other operating systems are not supported yet.
+The torrent service itself is Node-based, but the current global PTT helper uses a
+Windows API, so other operating systems are not supported by the packaged app yet.
 
 ## One-click Windows install
 
@@ -44,9 +44,8 @@ The first time a deployed voice-chat site connects, Windows displays an approval
 dialog. Verify its origin and choose **Yes**. The companion remembers approved origins
 under `%LOCALAPPDATA%\LiveKitCompanion`.
 
-The Start menu folder includes **Настроить клавишу рации**. Use it to discover a
-different key name, then edit `PTT_KEY` in the installed `start-companion.cmd`; the
-default is `F8`.
+The Start menu folder includes **Configure PTT key**. It validates and saves a supported
+key, restarts the companion, and keeps `F8` as the default.
 
 ## Setup
 
@@ -55,12 +54,13 @@ For development or a manual installation:
 ```bash
 cd companion
 npm install
+npm run build:ptt-helper
 ```
 
-Find the global talk-key name:
+List supported global talk-key names:
 
 ```bash
-npm run learn
+npm run keys
 ```
 
 Then start both PTT and torrent capabilities:
@@ -128,10 +128,17 @@ and WebM are the most portable choices; MKV and HEVC support varies by browser a
 
 - Both servers bind to `127.0.0.1` and are not reachable from the LAN.
 - Torrent stream paths contain a random token.
+- `LiveKitCompanionNative.exe` polls only the configured virtual key. It does not
+  install a global keyboard hook, enumerate other keys, collect typed characters, or
+  inspect windows. It also displays the origin-approval dialog without PowerShell.
 - A remote origin gets no WebSocket access until the user approves it. Approval covers
   both the PTT relay and torrent commands and is persisted per Windows user.
 - An explicit `COMPANION_ORIGINS` allowlist is authoritative and disables prompts.
 - Use torrents only for content you are authorized to download and share.
+
+The installer and helper are currently unsigned, so Windows SmartScreen or third-party
+antivirus software may still show a reputation warning. The project does not attempt to
+bypass or suppress security products.
 
 ## Autostart
 
