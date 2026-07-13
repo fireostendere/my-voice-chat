@@ -194,8 +194,8 @@ export default function Page() {
           </div>
           <div className={styles.companionCopy}>
             <span className={styles.companionEyebrow}>LOCAL COMPANION</span>
-            <h3 id="companion-title">Рация и торрент-кинотеатр без ограничений браузера</h3>
-            <p>Windows EXE, глобальная клавиша разговора и обычные BitTorrent-пиры.</p>
+            <h3 id="companion-title">Push-to-talk and torrent cinema beyond the browser</h3>
+            <p>Windows EXE, a global talk key, and standard BitTorrent peers.</p>
           </div>
           <CompanionDownloadLink />
         </section>

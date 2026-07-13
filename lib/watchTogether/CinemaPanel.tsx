@@ -4,7 +4,6 @@ import { useWatchTogether } from './WatchTogetherContext';
 import { parseVideoUrl } from './parseVideoUrl';
 import { isMagnetUri } from './torrentSource';
 import type { TorrentInput } from './types';
-import { CompanionDownloadLink } from '../CompanionDownloadLink';
 
 type Tab = 'link' | 'file' | 'torrent';
 
@@ -33,12 +32,12 @@ export function CinemaPanel() {
   const launchUrl = (event: React.FormEvent) => {
     event.preventDefault();
     if (embed.active && !embed.isHost) {
-      setError('Сейчас просмотром управляет другой участник. Дождитесь завершения показа.');
+      setError('Another participant controls playback. Wait until the current stream ends.');
       return;
     }
     const parsed = parseVideoUrl(url.trim());
     if (!parsed) {
-      setError('Нужна прямая http(s)-ссылка на видео или ссылка YouTube.');
+      setError('Enter a direct HTTP(S) video URL or a YouTube URL.');
       return;
     }
     if (parsed.kind === 'youtube') startEmbed('youtube', parsed.videoId);
@@ -50,11 +49,11 @@ export function CinemaPanel() {
   const launchFile = (file: File | undefined) => {
     if (!file) return;
     if (embed.active && !embed.isHost) {
-      setError('Сейчас просмотром управляет другой участник. Дождитесь завершения показа.');
+      setError('Another participant controls playback. Wait until the current stream ends.');
       return;
     }
     if (file.type && !file.type.startsWith('video/')) {
-      setError('Выберите видеофайл. Лучше всего работают MP4 (H.264/AAC) и WebM.');
+      setError('Select a video file. MP4 (H.264/AAC) and WebM work best.');
       return;
     }
     startStream(file);
@@ -64,7 +63,7 @@ export function CinemaPanel() {
 
   const launchTorrent = (input: TorrentInput) => {
     if (embed.active && !embed.isHost) {
-      setError('Сейчас просмотром управляет другой участник. Дождитесь завершения показа.');
+      setError('Another participant controls playback. Wait until the current stream ends.');
       return;
     }
     startTorrent(input);
@@ -76,7 +75,7 @@ export function CinemaPanel() {
     event.preventDefault();
     const value = magnet.trim();
     if (!isMagnetUri(value)) {
-      setError('Нужна корректная magnet-ссылка BitTorrent.');
+      setError('Enter a valid BitTorrent magnet link.');
       return;
     }
     launchTorrent({ kind: 'magnet', magnet: value, name: magnetDisplayName(value) });
@@ -85,7 +84,7 @@ export function CinemaPanel() {
   const launchTorrentFile = async (file: File | undefined) => {
     if (!file) return;
     if (file.size > MAX_TORRENT_FILE_BYTES) {
-      setError('Файл .torrent слишком большой. Максимальный размер — 2 МБ.');
+      setError('The .torrent file is too large. The limit is 2 MB.');
       return;
     }
     try {
@@ -95,7 +94,7 @@ export function CinemaPanel() {
         name: file.name,
       });
     } catch {
-      setError('Не удалось прочитать файл .torrent.');
+      setError('Could not read the .torrent file.');
     }
   };
 
@@ -107,7 +106,7 @@ export function CinemaPanel() {
     : embed.active
       ? embed.kind === 'youtube'
         ? 'YouTube'
-        : 'Видео по ссылке'
+        : 'Linked video'
       : null;
 
   return (
@@ -121,8 +120,8 @@ export function CinemaPanel() {
         <span className="lk-cinema-launcher-icon" aria-hidden="true">
           ▶
         </span>
-        <span>{activeLabel ?? 'Кинотеатр'}</span>
-        {active && <span className="lk-cinema-live-dot" aria-label="Сейчас воспроизводится" />}
+        <span>{activeLabel ?? 'Cinema'}</span>
+        {active && <span className="lk-cinema-live-dot" aria-label="Now playing" />}
       </button>
 
       {open && (
@@ -137,20 +136,20 @@ export function CinemaPanel() {
             <header className="lk-cinema-panel-header">
               <div>
                 <span className="lk-cinema-eyebrow">WATCH TOGETHER</span>
-                <h2 id="cinema-title">Кинотеатр комнаты</h2>
-                <p>Запустите видео, и все участники увидят его одновременно.</p>
+                <h2 id="cinema-title">Room cinema</h2>
+                <p>Start a video and everyone in the room will watch it together.</p>
               </div>
               <button
                 type="button"
                 className="lk-cinema-close"
-                aria-label="Закрыть"
+                aria-label="Close"
                 onClick={() => setOpen(false)}
               >
                 ×
               </button>
             </header>
 
-            <div className="lk-cinema-tabs" role="tablist" aria-label="Источник видео">
+            <div className="lk-cinema-tabs" role="tablist" aria-label="Video source">
               <button
                 type="button"
                 role="tab"
@@ -160,7 +159,7 @@ export function CinemaPanel() {
                   setError(null);
                 }}
               >
-                Ссылка или YouTube
+                Link or YouTube
               </button>
               <button
                 type="button"
@@ -171,7 +170,7 @@ export function CinemaPanel() {
                   setError(null);
                 }}
               >
-                Файл с устройства
+                Device file
               </button>
               <button
                 type="button"
@@ -182,13 +181,13 @@ export function CinemaPanel() {
                   setError(null);
                 }}
               >
-                Торрент
+                Torrent
               </button>
             </div>
 
             {tab === 'link' ? (
               <form className="lk-cinema-link-form" onSubmit={launchUrl}>
-                <label htmlFor="cinema-url">Адрес видео</label>
+                <label htmlFor="cinema-url">Video URL</label>
                 <div className="lk-cinema-url-row">
                   <input
                     id="cinema-url"
@@ -196,19 +195,19 @@ export function CinemaPanel() {
                     type="text"
                     inputMode="url"
                     autoFocus
-                    placeholder="https://youtu.be/... или https://site/video.m3u8"
+                    placeholder="https://youtu.be/... or https://site/video.m3u8"
                     onChange={(event) => {
                       setUrl(event.target.value);
                       setError(null);
                     }}
                   />
                   <button type="submit" className="lk-button" disabled={!url.trim()}>
-                    Запустить
+                    Start
                   </button>
                 </div>
                 <p className="lk-cinema-hint">
-                  MP4, WebM, Ogg, HLS (.m3u8), YouTube watch/shorts/embed. Сервер прямого видео
-                  должен разрешать воспроизведение из браузера.
+                  MP4, WebM, Ogg, HLS (.m3u8), and YouTube watch/shorts/embed URLs. Direct video
+                  servers must allow browser playback.
                 </p>
               </form>
             ) : tab === 'file' ? (
@@ -229,14 +228,14 @@ export function CinemaPanel() {
                 <div className="lk-cinema-file-mark" aria-hidden="true">
                   +
                 </div>
-                <strong>Перетащите видео сюда</strong>
-                <span>Файл не загружается на сервер, а транслируется через LiveKit</span>
+                <strong>Drop a video here</strong>
+                <span>The file stays on this device and streams through LiveKit</span>
                 <button
                   type="button"
                   className="lk-button"
                   onClick={() => inputRef.current?.click()}
                 >
-                  Выбрать файл
+                  Choose file
                 </button>
                 <input
                   ref={inputRef}
@@ -252,7 +251,7 @@ export function CinemaPanel() {
             ) : (
               <div className="lk-cinema-torrent">
                 <form className="lk-cinema-link-form" onSubmit={launchMagnet}>
-                  <label htmlFor="cinema-magnet">Magnet-ссылка</label>
+                  <label htmlFor="cinema-magnet">Magnet link</label>
                   <div className="lk-cinema-url-row">
                     <input
                       id="cinema-magnet"
@@ -267,19 +266,19 @@ export function CinemaPanel() {
                       }}
                     />
                     <button type="submit" className="lk-button" disabled={!magnet.trim()}>
-                      Запустить
+                      Start
                     </button>
                   </div>
                 </form>
                 <div className="lk-cinema-torrent-divider">
-                  <span>или</span>
+                  <span>or</span>
                 </div>
                 <button
                   type="button"
                   className="lk-button lk-cinema-torrent-file"
                   onClick={() => torrentInputRef.current?.click()}
                 >
-                  Выбрать файл .torrent
+                  Choose .torrent file
                 </button>
                 <input
                   ref={torrentInputRef}
@@ -291,26 +290,19 @@ export function CinemaPanel() {
                     event.target.value = '';
                   }}
                 />
-                <div className="lk-cinema-engine-route" aria-label="Автоматический выбор движка">
+                <div className="lk-cinema-engine-route" aria-label="Automatic engine selection">
                   <span>1</span>
                   <strong>Companion</strong>
-                  <i>обычные BitTorrent-пиры</i>
+                  <i>standard BitTorrent peers</i>
                   <b>→</b>
                   <span>2</span>
                   <strong>WebTorrent</strong>
-                  <i>fallback в браузере</i>
-                </div>
-                <div className="lk-cinema-companion-download">
-                  <div>
-                    <strong>Нет companion?</strong>
-                    <span>Обычный EXE-установщик уже включает Node.js и все зависимости.</span>
-                  </div>
-                  <CompanionDownloadLink compact />
+                  <i>browser fallback</i>
                 </div>
                 <p className="lk-cinema-hint">
-                  Сначала используется локальный companion. Если он не установлен или не запущен,
-                  кинотеатр автоматически перейдёт на WebTorrent. На сервер приложения torrent-файл
-                  не загружается.
+                  The local companion is preferred. If it is not installed or running, cinema
+                  automatically falls back to WebTorrent. The application server never receives the
+                  torrent file.
                 </p>
               </div>
             )}
@@ -319,8 +311,8 @@ export function CinemaPanel() {
             {active && (
               <p className="lk-cinema-replace-note">
                 {embed.active && !embed.isHost
-                  ? `Сейчас показ ведет ${embed.hostIdentity}. Сменить источник сможет только ведущий.`
-                  : 'Новый запуск заменит текущий источник для всей комнаты.'}
+                  ? `${embed.hostIdentity} is hosting now. Only the host can replace the source.`
+                  : 'Starting a new source replaces the current one for the entire room.'}
               </p>
             )}
           </section>

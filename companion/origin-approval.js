@@ -80,22 +80,13 @@ function createFileOriginApprover({ configuredOrigins = [], dataDir = companionD
 function promptForOrigin(origin) {
   if (process.platform !== 'win32') return Promise.resolve(false);
 
-  const script = [
-    'Add-Type -AssemblyName PresentationFramework',
-    '$origin = $env:COMPANION_PENDING_ORIGIN',
-    '$message = "Разрешить сайту $origin подключаться к LiveKit Companion?`n`nРазрешение включает глобальную рацию и торрент-кинотеатр."',
-    "$answer = [System.Windows.MessageBox]::Show($message, 'LiveKit Companion', 'YesNo', 'Question')",
-    "if ($answer -eq 'Yes') { exit 0 } else { exit 1 }",
-  ].join('; ');
+  const helperPath = path.join(__dirname, 'bin', 'LiveKitCompanionNative.exe');
 
   return new Promise((resolve) => {
     execFile(
-      'powershell.exe',
-      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-Command', script],
-      {
-        env: { ...process.env, COMPANION_PENDING_ORIGIN: origin },
-        windowsHide: true,
-      },
+      helperPath,
+      ['--approve-origin', origin],
+      { windowsHide: true },
       (error) => resolve(!error),
     );
   });

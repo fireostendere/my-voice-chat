@@ -47,11 +47,11 @@ export function selectLargestVideoFile<T extends TorrentFileCandidate>(files: T[
 }
 
 export function formatTorrentSpeed(bytesPerSecond: number): string {
-  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return '0 Б/с';
+  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return '0 B/s';
   if (bytesPerSecond >= 1024 * 1024) {
-    return `${(bytesPerSecond / 1024 / 1024).toFixed(1)} МБ/с`;
+    return `${(bytesPerSecond / 1024 / 1024).toFixed(1)} MB/s`;
   }
-  return `${Math.round(bytesPerSecond / 1024)} КБ/с`;
+  return `${Math.round(bytesPerSecond / 1024)} KB/s`;
 }
 
 export async function prepareTorrentSource(
@@ -67,7 +67,7 @@ export async function prepareTorrentSource(
     onStatus({
       engine: 'browser',
       phase: 'connecting',
-      detail: 'Companion не найден, запускаю WebTorrent в браузере…',
+      detail: 'Companion not found. Starting WebTorrent in the browser…',
     });
     return prepareWithBrowser(video, input, onStatus, signal);
   }
@@ -128,7 +128,7 @@ function prepareWithCompanion(
     }
 
     signal.addEventListener('abort', onAbort, { once: true });
-    onStatus({ engine: 'companion', phase: 'connecting', detail: 'Проверяю companion…' });
+    onStatus({ engine: 'companion', phase: 'connecting', detail: 'Checking companion…' });
 
     socket.onopen = () => {
       socket.send(JSON.stringify({ type: 'capabilities' }));
@@ -157,7 +157,7 @@ function prepareWithCompanion(
         onStatus({
           engine: 'companion',
           phase: 'metadata',
-          detail: 'Companion подключён, получаю метаданные…',
+          detail: 'Companion connected. Fetching metadata…',
         });
         return;
       }
@@ -167,7 +167,7 @@ function prepareWithCompanion(
         onStatus({
           engine: 'companion',
           phase: message.phase === 'ready' ? 'ready' : 'buffering',
-          detail: typeof message.detail === 'string' ? message.detail : 'Загрузка…',
+          detail: typeof message.detail === 'string' ? message.detail : 'Downloading…',
           progress: finiteNumber(message.progress),
           peers: finiteNumber(message.peers),
           downloadSpeed: finiteNumber(message.downloadSpeed),
@@ -176,7 +176,7 @@ function prepareWithCompanion(
         const streamUrl = typeof message.streamUrl === 'string' ? message.streamUrl : '';
         const fileName = typeof message.fileName === 'string' ? message.fileName : input.name;
         if (!streamUrl) {
-          finishWithError(new Error('Companion вернул пустой адрес видеопотока.'));
+          finishWithError(new Error('Companion returned an empty video stream URL.'));
           return;
         }
         prepared = true;
@@ -186,7 +186,7 @@ function prepareWithCompanion(
         resolve({ engine: 'companion', fileName, cleanup: stop });
       } else if (message.type === 'torrent-error') {
         const error = new Error(
-          typeof message.message === 'string' ? message.message : 'Ошибка companion.',
+          typeof message.message === 'string' ? message.message : 'Companion error.',
         );
         if (prepared) {
           onStatus({ engine: 'companion', phase: 'error', detail: error.message });
@@ -203,14 +203,14 @@ function prepareWithCompanion(
       if (!settled) {
         finishWithError(
           capable
-            ? new Error('Companion отключился во время подготовки торрента.')
+            ? new Error('Companion disconnected while preparing the torrent.')
             : new CompanionUnavailableError('Companion unavailable'),
         );
       } else if (prepared && !signal.aborted) {
         onStatus({
           engine: 'companion',
           phase: 'error',
-          detail: 'Связь с companion потеряна.',
+          detail: 'Connection to companion was lost.',
         });
       }
     };
@@ -224,7 +224,7 @@ async function prepareWithBrowser(
   signal: AbortSignal,
 ): Promise<PreparedTorrentSource> {
   if (!('serviceWorker' in navigator)) {
-    throw new Error('Браузер не поддерживает service worker, необходимый WebTorrent.');
+    throw new Error('This browser does not support the service worker required by WebTorrent.');
   }
 
   const registration = await ensureWebTorrentWorker(signal);
@@ -268,14 +268,14 @@ async function prepareWithBrowser(
       }
     };
     client.on('error', fail);
-    onStatus({ engine: 'browser', phase: 'metadata', detail: 'Ищу WebTorrent-пиров…' });
+    onStatus({ engine: 'browser', phase: 'metadata', detail: 'Looking for WebTorrent peers…' });
 
     const torrentId = input.kind === 'magnet' ? input.magnet : input.bytes;
     const torrent = client.add(torrentId, (readyTorrent: any) => {
       if (signal.aborted) return;
       const file = selectLargestVideoFile<BrowserTorrentFile>(readyTorrent.files);
       if (!file) {
-        fail(new Error('В торренте не найден поддерживаемый видеофайл.'));
+        fail(new Error('No supported video file was found in the torrent.'));
         return;
       }
 
@@ -310,7 +310,7 @@ async function ensureWebTorrentWorker(signal: AbortSignal): Promise<ServiceWorke
   });
   if (signal.aborted) throw new DOMException('Torrent source aborted', 'AbortError');
   const worker = registration.active ?? registration.installing ?? registration.waiting;
-  if (!worker) throw new Error('Не удалось запустить WebTorrent service worker.');
+  if (!worker) throw new Error('Could not start the WebTorrent service worker.');
   if (worker.state !== 'activated') {
     await new Promise<void>((resolve, reject) => {
       const cleanup = () => {
@@ -327,7 +327,7 @@ async function ensureWebTorrentWorker(signal: AbortSignal): Promise<ServiceWorke
           resolve();
         } else if (worker.state === 'redundant') {
           cleanup();
-          reject(new Error('WebTorrent service worker остановлен браузером.'));
+          reject(new Error('The browser stopped the WebTorrent service worker.'));
         }
       };
       signal.addEventListener('abort', onAbort, { once: true });

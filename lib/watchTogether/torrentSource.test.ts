@@ -30,8 +30,8 @@ describe('selectLargestVideoFile', () => {
 
 describe('formatTorrentSpeed', () => {
   it('formats byte rates for the host panel', () => {
-    expect(formatTorrentSpeed(0)).toBe('0 Б/с');
-    expect(formatTorrentSpeed(128 * 1024)).toBe('128 КБ/с');
-    expect(formatTorrentSpeed(1.5 * 1024 * 1024)).toBe('1.5 МБ/с');
+    expect(formatTorrentSpeed(0)).toBe('0 B/s');
+    expect(formatTorrentSpeed(128 * 1024)).toBe('128 KB/s');
+    expect(formatTorrentSpeed(1.5 * 1024 * 1024)).toBe('1.5 MB/s');
   });
 });

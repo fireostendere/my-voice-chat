@@ -18,7 +18,10 @@
 # production
 /build
 /companion/dist/
+/companion/bin/
 /companion/installer/build/
+/companion/ptt-helper/bin/
+/companion/ptt-helper/obj/
 
 # misc
 .DS_Store

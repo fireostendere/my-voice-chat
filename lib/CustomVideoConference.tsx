@@ -25,6 +25,7 @@ import { EmbedTile } from './watchTogether/EmbedTile';
 import { StreamHostController } from './watchTogether/StreamHostController';
 import { CustomChat } from './watchTogether/CustomChat';
 import { CinemaPanel } from './watchTogether/CinemaPanel';
+import { CompanionDownloadLink } from './CompanionDownloadLink';
 
 export interface CustomVideoConferenceProps extends React.HTMLAttributes<HTMLDivElement> {
   chatMessageFormatter?: MessageFormatter;
@@ -137,7 +138,10 @@ function CustomVideoConferenceInner({
               </FocusLayoutContainer>
             </div>
           )}
-          <CinemaPanel />
+          <div className="lk-room-tools">
+            <CinemaPanel />
+            <CompanionDownloadLink compact className="lk-room-companion-download" />
+          </div>
           <ControlBar controls={{ chat: true, settings: !!SettingsComponent }} />
         </div>
         <CustomChat

@@ -209,10 +209,19 @@ to Next.js but can only discover WebRTC-compatible WebTorrent peers and web seed
 both modes viewers do not join the swarm: LiveKit receives and forwards only the
 captured encoded media tracks.
 
-The home page and torrent source panel link to `/api/companion/download`. The route
+The home page and the room's always-visible top toolbar link to
+`/api/companion/download`. The route
 redirects to `LiveKitCompanionSetup.exe` in a rolling GitHub Release, so the Next.js
 server does not build or store binaries. A Windows GitHub Actions job packages Node.js,
-the companion, its dependencies, shortcuts, and autostart support with Inno Setup.
+the companion, its dependencies, shortcuts, and autostart support with Inno Setup. The
+same job builds `LiveKitCompanionNative.exe` from repository C# source with .NET Native
+AOT.
+
+The PTT helper polls only the configured Windows virtual key. It replaces the previous
+third-party global keyboard hook and does not enumerate other keys or collect typed
+characters. The Node process converts only `DOWN`/`UP` transitions into PTT WebSocket
+messages. The same helper displays the Windows origin-approval dialog without invoking
+PowerShell or evaluating a generated script.
 
 On first contact from a remote browser origin, the companion displays a native Windows
 approval dialog. Approved origins are persisted per user and receive both PTT and

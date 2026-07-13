@@ -368,11 +368,22 @@ h2 a {
   text-overflow: ellipsis;
 }
 
-.lk-cinema-launcher {
+.lk-room-tools {
   position: absolute;
   top: 1rem;
   left: 1rem;
   z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.lk-cinema-launcher {
+  position: static;
+}
+
+.lk-room-companion-download {
+  min-height: 2.75rem;
 }
 
 .lk-cinema-launcher-button {
@@ -674,34 +685,6 @@ h2 a {
   font-size: 1rem;
 }
 
-.lk-cinema-companion-download {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-top: 0.75rem;
-  padding: 0.75rem;
-  background: linear-gradient(110deg, rgba(246, 138, 96, 0.1), rgba(0, 0, 0, 0.16));
-  border: 1px solid rgba(246, 138, 96, 0.18);
-  border-radius: 0.7rem;
-}
-
-.lk-cinema-companion-download > div {
-  display: grid;
-  gap: 0.18rem;
-}
-
-.lk-cinema-companion-download > div > strong {
-  color: rgba(255, 255, 255, 0.88);
-  font-size: 0.78rem;
-}
-
-.lk-cinema-companion-download > div > span {
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 0.68rem;
-  line-height: 1.35;
-}
-
 .lk-cinema-dropzone {
   display: flex;
   min-height: 15rem;
@@ -763,13 +746,20 @@ h2 a {
 }
 
 @media (max-width: 640px) {
-  .lk-cinema-launcher {
+  .lk-room-tools {
     top: 0.65rem;
     left: 0.65rem;
+    right: 0.65rem;
+    align-items: stretch;
   }
 
   .lk-cinema-launcher-button {
-    max-width: calc(100vw - 1.3rem);
+    max-width: calc(100vw - 11.5rem);
+  }
+
+  .lk-room-companion-download {
+    min-width: 9.6rem;
+    margin-left: auto;
   }
 
   .lk-cinema-backdrop {
@@ -798,11 +788,6 @@ h2 a {
 
   .lk-cinema-engine-route > b {
     display: none;
-  }
-
-  .lk-cinema-companion-download {
-    align-items: stretch;
-    flex-direction: column;
   }
 
   .lk-watch-together-overlay {

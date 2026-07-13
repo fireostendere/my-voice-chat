@@ -45,7 +45,7 @@ describe('parseTorrentInput', () => {
 
   it('rejects malformed input', () => {
     expect(() => parseTorrentInput({ kind: 'magnet', magnet: 'nope' })).toThrow(
-      'Некорректная magnet-ссылка',
+      'Invalid magnet link',
     );
   });
 });

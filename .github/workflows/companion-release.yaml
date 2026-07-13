@@ -28,9 +28,17 @@ jobs:
           cache: npm
           cache-dependency-path: companion/package-lock.json
 
+      - name: Use .NET 8
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
       - name: Install companion dependencies
         working-directory: companion
         run: npm ci --omit=dev --no-audit --no-fund
+
+      - name: Build limited PTT key helper
+        run: dotnet publish companion/ptt-helper/PttKeyState.csproj -c Release -r win-x64 -o companion/installer/build/ptt-helper
 
       - name: Prepare portable runtime
         shell: pwsh
@@ -39,9 +47,9 @@ jobs:
           $node = (Get-Command node).Source
           Copy-Item $node companion/installer/build/node.exe
           Copy-Item (Join-Path (Split-Path $node) 'LICENSE') companion/installer/build/LICENSE-node.txt
-          $keyServer = 'companion/node_modules/node-global-key-listener/bin/WinKeyServer.exe'
-          if (-not (Test-Path $keyServer)) {
-            throw "Windows key server is missing: $keyServer"
+          $pttHelper = 'companion/installer/build/ptt-helper/LiveKitCompanionNative.exe'
+          if (-not (Test-Path $pttHelper)) {
+            throw "PTT key helper is missing: $pttHelper"
           }
 
       - name: Compile EXE installer

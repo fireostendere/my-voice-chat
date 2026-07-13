@@ -3,10 +3,9 @@
 /**
  * LiveKit local companion.
  *
- * Captures one global key via a low-level keyboard hook (so it fires even when
- * the browser is not the focused window — e.g. while playing a game) and relays
- * `down`/`up` events to the browser over a localhost-only WebSocket. The web app
- * connects to it and opens the mic only while the key is held.
+ * Polls only the configured global key through a small Windows helper (so it
+ * works while a game has focus) and relays `down`/`up` to the browser over a
+ * localhost-only WebSocket. It does not install a system-wide keyboard hook.
  *
  * Config (environment variables):
  *   PTT_PORT     WebSocket port (default 7331)
@@ -16,21 +15,18 @@
  *                "https://chat.example.com". Without an explicit list, Windows
  *                asks the user once before trusting each remote origin.
  *
- * Run `npm run learn` (or `node index.js --learn`) and press a key to discover
- * its exact name, then set PTT_KEY to that name.
+ * Run `npm run keys` to list supported key names.
  */
 
-const { GlobalKeyboardListener } = require('node-global-key-listener');
 const { WebSocketServer } = require('ws');
 const fs = require('node:fs');
 const path = require('node:path');
 const { companionDataDir, createFileOriginApprover } = require('./origin-approval');
-const { reduce } = require('./ptt-core');
+const { PttKeyListener, normalizePttKey } = require('./ptt-key-listener');
 const { TorrentService } = require('./torrent-service');
 
 const PORT = Number(process.env.PTT_PORT) || 7331;
-const PTT_KEY = (process.env.PTT_KEY || 'F8').toUpperCase();
-const LEARN = process.argv.includes('--learn') || process.env.PTT_LEARN === '1';
+const PTT_KEY = normalizePttKey(process.env.PTT_KEY || 'F8');
 const TORRENT_PORT = Number(process.env.TORRENT_PORT) || PORT + 1;
 const ALLOWED_ORIGINS = (process.env.COMPANION_ORIGINS || process.env.PTT_ORIGINS || '')
   .split(',')
@@ -74,12 +70,8 @@ function broadcast(state) {
 wss.on('listening', () => {
   console.log(`[companion] WebSocket listening on ws://127.0.0.1:${PORT}`);
   console.log(`[companion] Torrent stream will use http://127.0.0.1:${TORRENT_PORT}`);
-  if (LEARN) {
-    console.log('[companion] LEARN mode: press your desired talk key to see its name.');
-  } else {
-    console.log(`[companion] Talk key: "${PTT_KEY}"  (change with the PTT_KEY env var)`);
-    console.log('[companion] Hold it to talk. Run `npm run learn` to find a key name.');
-  }
+  console.log(`[companion] Talk key: "${PTT_KEY}"  (change with the PTT_KEY env var)`);
+  console.log('[companion] Hold it to talk. Run `npm run keys` to list supported keys.');
 });
 wss.on('connection', (socket, req) => {
   const origin = req.headers.origin;
@@ -91,21 +83,15 @@ wss.on('error', (err) => {
   if (err.code === 'EADDRINUSE') shutdown(1);
 });
 
-const keyboard = new GlobalKeyboardListener();
-keyboard.addListener((event) => {
-  if (LEARN) {
-    if (event.state === 'DOWN') {
-      console.log(`[learn] key down: "${event.name}"`);
-    }
-    return;
-  }
-
-  const next = reduce(talking, event, PTT_KEY);
-  if (next !== talking) {
-    broadcast(next ? 'down' : 'up');
-  }
-  talking = next;
+const keyboard = new PttKeyListener({
+  key: PTT_KEY,
+  onState: (next) => {
+    if (next !== talking) broadcast(next ? 'down' : 'up');
+    talking = next;
+  },
+  onError: (error) => console.error('[companion] PTT helper:', error.message),
 });
+keyboard.start();
 
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
@@ -116,7 +102,7 @@ async function shutdown(exitCode) {
   shuttingDown = true;
   console.log('\n[companion] shutting down');
   await torrentService.close();
-  keyboard.kill();
+  keyboard.stop();
   for (const client of wss.clients) client.close(1001, 'Companion stopping');
   wss.close(() => process.exit(exitCode));
   setTimeout(() => process.exit(exitCode), 1000).unref();

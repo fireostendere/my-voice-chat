@@ -215,11 +215,15 @@ Browser WebTorrent can only reach WebRTC-capable peers and web seeds. Install an
 the companion when ordinary public magnet links must work. Torrent playback still
 depends on the browser being able to decode the selected (largest) video file.
 
-The home page and the room's torrent tab provide a **Download companion** button. It
+The home page and the room's always-visible top toolbar provide a **Download companion** button. It
 redirects to a Windows EXE installer from the rolling `companion-latest` GitHub
 release. The installer contains Node.js and all dependencies, installs without admin
 rights, creates shortcuts, and can enable startup with Windows. A separate global
 Node.js installation is not required.
+
+The packaged PTT helper is built from this repository and checks only the configured
+virtual key. It replaces the previous third-party global keyboard hook; it does not
+capture typed text or observe unrelated keys.
 
 On the first connection from a remote voice-chat origin, Windows asks the user to
 approve that site. The decision is stored locally and gates both PTT and torrent

@@ -69,8 +69,8 @@ export function CustomChat({
           <button
             type="button"
             className="lk-button lk-chat-close-button"
-            aria-label="Закрыть чат"
-            title="Закрыть чат"
+            aria-label="Close chat"
+            title="Close chat"
             onClick={() => layoutContext.widget.dispatch?.({ msg: 'toggle_chat' })}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -100,7 +100,7 @@ export function CustomChat({
           className="lk-form-control lk-chat-form-input"
           disabled={isSending}
           type="text"
-          placeholder="Сообщение"
+          placeholder="Message"
           onInput={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
           onKeyUp={(e) => e.stopPropagation()}

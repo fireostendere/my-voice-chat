@@ -31,7 +31,7 @@ export function PushToTalkIndicator({ connected, talking }: PushToTalkState) {
       }}
     >
       <span aria-hidden>🎙️</span>
-      <span>{talking ? 'Говорите…' : 'Рация подключена — зажмите клавишу'}</span>
+      <span>{talking ? 'Talking…' : 'Push-to-talk connected · hold the talk key'}</span>
     </div>
   );
 }

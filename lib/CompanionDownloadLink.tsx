@@ -19,7 +19,7 @@ export function CompanionDownloadLink({
       </svg>
       <span>
         <small>WINDOWS .EXE</small>
-        <strong>Скачать companion</strong>
+        <strong>Download companion</strong>
       </span>
     </a>
   );

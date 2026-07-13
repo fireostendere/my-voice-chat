@@ -11,11 +11,11 @@ describe('PushToTalkIndicator', () => {
 
   it('shows the idle hint when connected but not talking', () => {
     render(<PushToTalkIndicator connected talking={false} />);
-    expect(screen.getByText(/Рация подключена/)).toBeTruthy();
+    expect(screen.getByText(/Push-to-talk connected/)).toBeTruthy();
   });
 
   it('shows the talking state while the key is held', () => {
     render(<PushToTalkIndicator connected talking />);
-    expect(screen.getByText(/Говорите/)).toBeTruthy();
+    expect(screen.getByText(/Talking/)).toBeTruthy();
   });
 });
