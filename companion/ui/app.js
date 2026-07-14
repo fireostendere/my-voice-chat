@@ -3,11 +3,10 @@
 const token = document.querySelector('meta[name="companion-token"]').content;
 const roomSelect = document.querySelector('#room-select');
 const roomCount = document.querySelector('#room-count');
-const pttKeySelect = document.querySelector('#ptt-key-select');
 const keyDisplay = document.querySelector('#key-display');
 const keyCaptureButton = document.querySelector('#key-capture-button');
+const keyCaptureState = document.querySelector('#key-capture-state');
 const keyCaptureLabel = document.querySelector('#key-capture-label');
-const saveKeyButton = document.querySelector('#save-key-button');
 const fileInput = document.querySelector('#torrent-file');
 const fileLabel = document.querySelector('#file-label');
 const dropZone = document.querySelector('#drop-zone');
@@ -28,8 +27,11 @@ const toast = document.querySelector('#toast');
 let rooms = [];
 let selectedFile = null;
 let toastTimer;
-let keyDirty = false;
+let keyCaptureFeedbackTimer;
+let supportedPttKeys = new Set();
+let configuredPttKey = 'F8';
 let capturingKey = false;
+let savingKey = false;
 let seeking = false;
 let playbackBusy = false;
 
@@ -67,7 +69,8 @@ function renderRooms() {
   if (rooms.length === 0) {
     roomSelect.add(new Option('No active rooms', ''));
     roomSelect.disabled = true;
-    footerStatus.textContent = 'Open a voice-chat room to connect it.';
+    footerStatus.textContent =
+      'Join a room in the browser and allow its local-network access prompt.';
   } else {
     for (const room of rooms) {
       roomSelect.add(new Option(`${room.roomName} · ${room.participantIdentity}`, room.id));
@@ -82,12 +85,10 @@ function renderRooms() {
 }
 
 function renderKeys(keys, currentKey) {
-  if (pttKeySelect.options.length === 0) {
-    for (const key of keys) pttKeySelect.add(new Option(displayKeyName(key), key));
-  }
-  if (!keyDirty) {
-    pttKeySelect.value = currentKey;
-    keyDisplay.textContent = displayKeyName(currentKey);
+  supportedPttKeys = new Set(keys);
+  if (!capturingKey && !savingKey) {
+    configuredPttKey = currentKey;
+    renderIdleKeyBinding();
   }
 }
 
@@ -99,7 +100,7 @@ function renderPlayback() {
     playbackTitle.textContent = 'Nothing is playing';
     playbackDetail.textContent = rooms.length
       ? 'Choose a torrent above and send it to this room.'
-      : 'Open a voice-chat room to enable remote playback controls.';
+      : 'Join a room in the browser and allow access to this PC when prompted.';
     if (!seeking) playbackSeek.value = '0';
     playbackSeek.disabled = true;
     playbackCurrent.textContent = '0:00';
@@ -219,54 +220,126 @@ async function sendPlaybackCommand(action, currentTime) {
   }
 }
 
-async function savePttKey() {
-  saveKeyButton.disabled = true;
+async function applyCapturedKey(key) {
+  if (!capturingKey || savingKey) return;
+  if (!supportedPttKeys.has(key)) {
+    showUnsupportedKey();
+    return;
+  }
+
+  clearTimeout(keyCaptureFeedbackTimer);
+  capturingKey = false;
+  savingKey = true;
+  keyCaptureButton.classList.remove('capturing', 'capture-error');
+  keyCaptureButton.classList.add('saving');
+  keyCaptureButton.setAttribute('aria-pressed', 'false');
+  keyCaptureButton.setAttribute('aria-busy', 'true');
+  keyCaptureButton.disabled = true;
+  keyCaptureState.textContent = 'APPLYING';
+  keyDisplay.textContent = displayKeyName(key);
+  keyCaptureLabel.textContent = 'Switching the global listener…';
+
   try {
     const result = await api('/api/settings/ptt-key', {
       method: 'POST',
-      body: JSON.stringify({ key: pttKeySelect.value }),
+      body: JSON.stringify({ key }),
     });
-    keyDirty = false;
-    keyDisplay.textContent = displayKeyName(result.pttKey);
-    stopKeyCapture();
+    configuredPttKey = result.pttKey;
     showToast(`Push-to-talk key changed to ${displayKeyName(result.pttKey)}.`);
   } catch (error) {
     showToast(error.message, true);
   } finally {
-    saveKeyButton.disabled = false;
+    savingKey = false;
+    renderIdleKeyBinding();
   }
 }
 
 function toggleKeyCapture() {
-  capturingKey = !capturingKey;
-  keyCaptureButton.classList.toggle('capturing', capturingKey);
-  keyCaptureLabel.textContent = capturingKey
-    ? 'Press one key or a mouse side button…'
-    : 'Click to capture a key';
-}
-
-function stopKeyCapture() {
-  capturingKey = false;
-  keyCaptureButton.classList.remove('capturing');
-  keyCaptureLabel.textContent = 'Click to capture a key';
-}
-
-function captureKey(key) {
-  if (![...pttKeySelect.options].some((option) => option.value === key)) {
-    showToast('That key is not supported for push-to-talk.', true);
+  if (savingKey) return;
+  if (capturingKey) {
+    cancelKeyCapture(true);
     return;
   }
-  pttKeySelect.value = key;
-  keyDisplay.textContent = displayKeyName(key);
-  keyDirty = true;
-  stopKeyCapture();
+
+  clearTimeout(keyCaptureFeedbackTimer);
+  capturingKey = true;
+  keyCaptureButton.classList.remove('capture-error', 'saving');
+  keyCaptureButton.classList.add('capturing');
+  keyCaptureButton.setAttribute('aria-pressed', 'true');
+  keyCaptureButton.removeAttribute('aria-busy');
+  keyCaptureState.textContent = 'LISTENING';
+  keyDisplay.textContent = '…';
+  keyCaptureLabel.textContent = 'Press a key or Mouse 4 / 5';
 }
 
-function browserKeyName(key) {
-  const aliases = {
+function cancelKeyCapture(announce = false) {
+  if (!capturingKey) return;
+  capturingKey = false;
+  renderIdleKeyBinding();
+  if (announce) showToast('Talk key change cancelled.');
+}
+
+function renderIdleKeyBinding() {
+  clearTimeout(keyCaptureFeedbackTimer);
+  keyCaptureButton.classList.remove('capturing', 'saving', 'capture-error');
+  keyCaptureButton.setAttribute('aria-pressed', 'false');
+  keyCaptureButton.removeAttribute('aria-busy');
+  keyCaptureButton.disabled = supportedPttKeys.size === 0;
+  keyCaptureState.textContent = 'ACTIVE BIND';
+  keyDisplay.textContent = displayKeyName(configuredPttKey);
+  keyCaptureLabel.textContent = 'Click, then press a key';
+}
+
+function showUnsupportedKey() {
+  clearTimeout(keyCaptureFeedbackTimer);
+  keyCaptureButton.classList.add('capture-error');
+  keyCaptureState.textContent = 'NOT SUPPORTED';
+  keyCaptureLabel.textContent = 'Try another key · Esc cancels';
+  keyCaptureFeedbackTimer = setTimeout(() => {
+    if (!capturingKey) return;
+    keyCaptureButton.classList.remove('capture-error');
+    keyCaptureState.textContent = 'LISTENING';
+    keyCaptureLabel.textContent = 'Press a key or Mouse 4 / 5';
+  }, 1100);
+}
+
+function browserKeyName(event) {
+  const code = String(event.code || '');
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+  if (/^F(?:[1-9]|1[0-9]|2[0-4])$/.test(code)) return code;
+
+  const codeAliases = {
+    Backspace: 'BACKSPACE',
+    Tab: 'TAB',
+    Enter: 'ENTER',
+    NumpadEnter: 'ENTER',
+    ShiftLeft: 'SHIFT',
+    ShiftRight: 'SHIFT',
+    ControlLeft: 'CONTROL',
+    ControlRight: 'CONTROL',
+    AltLeft: 'ALT',
+    AltRight: 'ALT',
+    CapsLock: 'CAPSLOCK',
+    Space: 'SPACE',
+    PageUp: 'PAGEUP',
+    PageDown: 'PAGEDOWN',
+    End: 'END',
+    Home: 'HOME',
+    ArrowLeft: 'LEFT',
+    ArrowUp: 'UP',
+    ArrowRight: 'RIGHT',
+    ArrowDown: 'DOWN',
+    Insert: 'INSERT',
+    Delete: 'DELETE',
+  };
+  if (codeAliases[code]) return codeAliases[code];
+
+  const keyAliases = {
     ' ': 'SPACE',
     Control: 'CONTROL',
-    Escape: 'ESCAPE',
+    Shift: 'SHIFT',
+    Alt: 'ALT',
     CapsLock: 'CAPSLOCK',
     PageUp: 'PAGEUP',
     PageDown: 'PAGEDOWN',
@@ -275,15 +348,28 @@ function browserKeyName(key) {
     ArrowRight: 'RIGHT',
     ArrowDown: 'DOWN',
   };
-  return aliases[key] || String(key).toUpperCase();
+  return keyAliases[event.key] || String(event.key || '').toUpperCase();
 }
 
 function displayKeyName(key) {
-  if (key === 'XBUTTON1') return 'Mouse 4';
-  if (key === 'XBUTTON2') return 'Mouse 5';
-  if (key === 'CONTROL') return 'Ctrl';
-  if (key === 'ESCAPE') return 'Esc';
-  return key;
+  const names = {
+    XBUTTON1: 'Mouse 4',
+    XBUTTON2: 'Mouse 5',
+    CONTROL: 'Ctrl',
+    ESCAPE: 'Esc',
+    BACKSPACE: 'Backspace',
+    CAPSLOCK: 'Caps Lock',
+    PAGEUP: 'Page Up',
+    PAGEDOWN: 'Page Down',
+    INSERT: 'Insert',
+    DELETE: 'Delete',
+    SPACE: 'Space',
+    LEFT: '←',
+    UP: '↑',
+    RIGHT: '→',
+    DOWN: '↓',
+  };
+  return names[key] || key;
 }
 
 function arrayBufferToBase64(buffer) {
@@ -347,22 +433,33 @@ roomSelect.addEventListener('change', () => {
   updatePlayButton();
   renderPlayback();
 });
-pttKeySelect.addEventListener('change', () => {
-  keyDirty = true;
-  keyDisplay.textContent = displayKeyName(pttKeySelect.value);
-});
 keyCaptureButton.addEventListener('click', toggleKeyCapture);
-window.addEventListener('keydown', (event) => {
-  if (!capturingKey) return;
-  event.preventDefault();
-  event.stopPropagation();
-  captureKey(browserKeyName(event.key));
-});
-window.addEventListener('mousedown', (event) => {
-  if (!capturingKey || (event.button !== 3 && event.button !== 4)) return;
-  event.preventDefault();
-  captureKey(event.button === 3 ? 'XBUTTON1' : 'XBUTTON2');
-});
+window.addEventListener(
+  'keydown',
+  (event) => {
+    if (!capturingKey) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.repeat) return;
+    if (event.code === 'Escape' || event.key === 'Escape') {
+      cancelKeyCapture(true);
+      return;
+    }
+    void applyCapturedKey(browserKeyName(event));
+  },
+  true,
+);
+window.addEventListener(
+  'mousedown',
+  (event) => {
+    if (!capturingKey || (event.button !== 3 && event.button !== 4)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void applyCapturedKey(event.button === 3 ? 'XBUTTON1' : 'XBUTTON2');
+  },
+  true,
+);
+window.addEventListener('blur', () => cancelKeyCapture());
 playbackToggle.addEventListener('click', () => {
   const playback = selectedRoom()?.playback;
   if (playback?.active) void sendPlaybackCommand(playback.paused ? 'play' : 'pause');
@@ -384,7 +481,6 @@ playbackSeek.addEventListener('change', () => {
   void sendPlaybackCommand('seek', currentTime);
 });
 playButton.addEventListener('click', playTorrent);
-saveKeyButton.addEventListener('click', savePttKey);
 refreshButton.addEventListener('click', () => refreshStatus());
 
 refreshStatus({ quiet: true });

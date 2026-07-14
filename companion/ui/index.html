@@ -23,7 +23,7 @@
         <div class="service-state" id="service-state">
           <span></span>
           <strong>ONLINE</strong>
-          <small>127.0.0.1</small>
+          <small>THIS PC</small>
         </div>
       </header>
 
@@ -90,16 +90,25 @@
             </div>
           </div>
 
-          <button type="button" class="key-display" id="key-capture-button">
+          <button
+            type="button"
+            class="key-display"
+            id="key-capture-button"
+            aria-pressed="false"
+            aria-describedby="key-capture-help"
+            disabled
+          >
+            <span class="key-capture-state" id="key-capture-state">ACTIVE BIND</span>
             <strong id="key-display">F8</strong>
-            <small id="key-capture-label">Click to capture a key</small>
+            <small id="key-capture-label" aria-live="polite">Click, then press a key</small>
           </button>
-          <label class="field compact" for="ptt-key-select">
-            <span>Configured key</span>
-            <select id="ptt-key-select"></select>
-          </label>
-          <button type="button" class="secondary-action" id="save-key-button">Apply key</button>
-          <p class="key-note">The helper observes only this key and emits press/release state.</p>
+          <div class="key-capture-hints" aria-hidden="true">
+            <span><kbd>ESC</kbd> CANCEL</span>
+            <span><i></i> SAVES INSTANTLY</span>
+          </div>
+          <p class="key-note" id="key-capture-help">
+            Keyboard keys and Mouse 4 / 5 are supported. The helper observes only the active bind.
+          </p>
 
           <div class="room-facts">
             <div>
@@ -107,8 +116,8 @@
               <strong id="room-count">0</strong>
             </div>
             <div>
-              <span>ENGINE</span>
-              <strong>TCP / UDP</strong>
+              <span>BRIDGE</span>
+              <strong>Browser → this PC</strong>
             </div>
           </div>
         </aside>
@@ -164,7 +173,7 @@
       </div>
 
       <footer>
-        <span id="footer-status">Waiting for a voice-chat room…</span>
+        <span id="footer-status">Join a room in the browser and allow local access…</span>
         <button type="button" id="refresh-button">Refresh</button>
       </footer>
     </main>

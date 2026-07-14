@@ -203,8 +203,9 @@ directory, and exposes the selected largest video through a tokenized localhost 
 range stream. Closing the source or its WebSocket destroys the client and deletes the
 temporary directory.
 
-`CompanionRoomBridge` keeps a separate localhost WebSocket open while a room is active
-and registers the room name and local participant identity. The companion control UI
+`CompanionRoomBridge` waits for LiveKit's `Connected` event, then keeps a separate
+localhost WebSocket open while a room is active and registers the room name and local
+participant identity. The companion control UI
 lists those registrations and sends a validated `torrent-open` command to the selected
 room. The bridge converts the serialized `.torrent` bytes back to `TorrentInput` and
 starts the existing host pipeline; it does not create a second torrent engine. While
@@ -230,7 +231,7 @@ installer.
 
 The companion also serves a token-protected control UI on `127.0.0.1:7333`. It accepts
 magnet links and `.torrent` files for active rooms, exposes remote playback controls,
-and captures or selects the persisted PTT key. Desktop, Start-menu, post-install, and
+and captures and immediately persists the PTT key. Desktop, Start-menu, post-install, and
 autostart entries all target `LiveKitCompanion.exe`; the launcher starts the bundled
 Node process directly and opens the UI in an app-style Edge window. No CMD or VBS
 launcher is installed. The internal helper owns the LiveKit tray icon and can request

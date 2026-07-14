@@ -1,6 +1,7 @@
 'use client';
 import * as React from 'react';
 import { useRoomContext } from '@livekit/components-react';
+import { RoomEvent } from 'livekit-client';
 import { getCompanionWsUrl } from '../companion';
 import {
   parseCompanionPlaybackCommand,
@@ -30,13 +31,12 @@ export function CompanionRoomBridge() {
 
   React.useEffect(() => {
     const wsUrl = getCompanionWsUrl();
-    const roomName = room.name;
-    const participantIdentity = room.localParticipant.identity;
-    if (!wsUrl || !roomName || !participantIdentity) return;
+    if (!wsUrl) return;
 
     let socket: WebSocket | null = null;
     let reconnectTimer: number | undefined;
     let stopped = false;
+    let registeredRoomName = '';
 
     const reply = (type: string, commandId: string, accepted: boolean, message: string) => {
       if (socket?.readyState !== WebSocket.OPEN) return;
@@ -61,7 +61,7 @@ export function CompanionRoomBridge() {
             'torrent-open-result',
             torrentCommand.commandId,
             true,
-            `Torrent started in ${roomName}.`,
+            `Torrent started in ${registeredRoomName || room.name}.`,
           );
         } catch (error) {
           reply(
@@ -97,7 +97,11 @@ export function CompanionRoomBridge() {
     };
 
     const connect = () => {
-      if (stopped) return;
+      if (stopped || socket) return;
+      const roomName = room.name;
+      const participantIdentity = room.localParticipant.identity;
+      if (!roomName || !participantIdentity) return;
+
       let connection: WebSocket;
       try {
         connection = new WebSocket(wsUrl);
@@ -107,6 +111,7 @@ export function CompanionRoomBridge() {
       }
       socket = connection;
       socketRef.current = connection;
+      registeredRoomName = roomName;
       connection.onopen = () => {
         connection.send(JSON.stringify({ type: 'room-register', roomName, participantIdentity }));
         sendPlaybackState(connection, streamPlaybackRef.current);
@@ -127,9 +132,11 @@ export function CompanionRoomBridge() {
       };
     };
 
+    room.on(RoomEvent.Connected, connect);
     connect();
     return () => {
       stopped = true;
+      room.off(RoomEvent.Connected, connect);
       window.clearTimeout(reconnectTimer);
       socketRef.current = null;
       socket?.close();

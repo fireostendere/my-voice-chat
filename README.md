@@ -231,10 +231,12 @@ changes the global PTT key. The LiveKit tray icon reopens the window or exits th
 service. Use **Status and diagnostics** for the PID and startup log, and remove it with
 **Uninstall LiveKit Companion** or **Windows Settings → Apps → Installed apps**.
 
-On the first connection from a remote voice-chat origin, Windows asks the user to
-approve that site. The decision is stored locally and gates both PTT and torrent
-commands. Managed manual installations can still set an exact `COMPANION_ORIGINS`
-allowlist to disable interactive approval.
+On the first connection from a remote voice-chat origin, Chrome or Edge may first ask
+for local-network access. The companion then asks the user to approve that site in a
+Windows dialog. The decision is stored locally and gates both PTT and torrent commands.
+`127.0.0.1:7331` means the user's own PC, not the deployed web server. Managed manual
+installations can still set an exact `COMPANION_ORIGINS` allowlist to disable the
+companion's interactive approval.
 
 ## Deployment
 

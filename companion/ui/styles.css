@@ -385,6 +385,7 @@ select {
 }
 
 .key-display {
+  position: relative;
   display: grid;
   width: 100%;
   min-height: 8.7rem;
@@ -394,8 +395,10 @@ select {
   margin-bottom: 1rem;
   border: 1px solid rgba(255, 99, 82, 0.28);
   border-radius: 1rem;
+  overflow: hidden;
   color: var(--paper);
   background: radial-gradient(circle, rgba(255, 99, 82, 0.2), transparent 66%), #151412;
+  cursor: pointer;
   text-shadow: 0 0 34px rgba(255, 99, 82, 0.55);
   transition:
     border-color 160ms ease,
@@ -410,6 +413,48 @@ select {
   background: radial-gradient(circle, rgba(255, 99, 82, 0.28), transparent 70%), #151412;
 }
 
+.key-display:focus-visible {
+  outline: 2px solid var(--paper);
+  outline-offset: 3px;
+}
+
+.key-display:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.key-display.capturing::after {
+  position: absolute;
+  inset: -45%;
+  border: 1px solid rgba(255, 99, 82, 0.42);
+  border-radius: 50%;
+  content: '';
+  animation: capture-pulse 1.35s ease-out infinite;
+  pointer-events: none;
+}
+
+.key-display.saving {
+  border-color: #8fdaab;
+  background: radial-gradient(circle, rgba(91, 201, 131, 0.22), transparent 70%), #151412;
+}
+
+.key-display.capture-error {
+  border-color: #ffb14a;
+  animation: capture-shake 180ms ease-in-out 2;
+}
+
+.key-capture-state {
+  color: var(--coral);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-shadow: none;
+}
+
+.key-display.saving .key-capture-state {
+  color: #8fdaab;
+}
+
 .key-display strong {
   font-family: Consolas, monospace;
   font-size: 3.4rem;
@@ -422,6 +467,61 @@ select {
   font-weight: 600;
   letter-spacing: 0.02em;
   text-shadow: none;
+}
+
+.key-capture-hints {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -0.35rem 0 0.8rem;
+  color: var(--muted);
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.key-capture-hints span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.key-capture-hints kbd {
+  padding: 0.17rem 0.28rem;
+  border: 1px solid var(--line);
+  border-bottom-color: rgba(255, 255, 255, 0.27);
+  border-radius: 0.28rem;
+  color: var(--paper);
+  background: #272421;
+  font: inherit;
+}
+
+.key-capture-hints i {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: #8fdaab;
+  box-shadow: 0 0 10px rgba(143, 218, 171, 0.7);
+}
+
+@keyframes capture-pulse {
+  from {
+    opacity: 0.8;
+    transform: scale(0.15);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+@keyframes capture-shake {
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
 }
 
 .secondary-action {

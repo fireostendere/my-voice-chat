@@ -10,6 +10,10 @@ the companion when available and automatically falls back to browser WebTorrent 
 it is not running. The fallback can only reach WebRTC-compatible peers; the companion
 can reach regular BitTorrent peers.
 
+`127.0.0.1` means the same Windows PC where the browser and companion are running. It
+must not be replaced with the public Next.js or LiveKit server address: the deployed
+HTTPS page initiates this local connection from inside the user's browser.
+
 ## Data flow
 
 ```text
@@ -47,15 +51,18 @@ batch or VBS launchers and no config files to edit. The LiveKit tray icon can re
 the panel or exit the service. Use **Uninstall LiveKit Companion** or **Windows
 Settings → Apps → Installed apps** to remove it.
 
-The first time a deployed voice-chat site connects, Windows displays an approval
-dialog. Verify its origin and choose **Yes**. The companion remembers approved origins
-under `%LOCALAPPDATA%\LiveKitCompanion`.
+The first time a deployed voice-chat site connects, Chrome or Edge may ask to access
+devices on the local network; allow it so the page can reach the app on this PC. The
+companion then displays its own Windows approval dialog. Verify the site origin and
+choose **Yes**. The companion remembers approved origins under
+`%LOCALAPPDATA%\LiveKitCompanion`.
 
 The control panel lists active voice-chat rooms. Choose a `.torrent` file or paste a
 magnet link to start it in the selected room, then use the same panel to play, pause,
 seek, or stop the browser-hosted stream. Click the large key display and press a key or
-mouse side button to configure global PTT; the selector remains available as a
-fallback, and `F8` is the default. Settings persist automatically between EXE launches.
+mouse side button to configure global PTT. The new bind is applied immediately; `Esc`
+cancels capture, and `F8` is the default. Settings persist automatically between EXE
+launches.
 
 ## Setup
 
