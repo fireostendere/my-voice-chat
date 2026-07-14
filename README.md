@@ -218,22 +218,27 @@ depends on the browser being able to decode the selected (largest) video file.
 The home page and the room's always-visible top toolbar provide a **Download companion** button. It
 redirects to a Windows EXE installer from the rolling `companion-latest` GitHub
 release. The installer contains Node.js and all dependencies, installs without admin
-rights, creates shortcuts, and can enable startup with Windows. A separate global
-Node.js installation is not required.
+rights, installs the official Microsoft Edge WebView2 Runtime when needed, creates
+shortcuts, and can enable startup with Windows. A separate global Node.js installation
+is not required.
 
 The packaged PTT helper is built from this repository and checks only the configured
 virtual key. It replaces the previous third-party global keyboard hook; it does not
 capture typed text or observe unrelated keys.
 
-The **LiveKit Companion** shortcut starts the background service and opens a local
-control window. It lists active rooms, accepts magnet links and `.torrent` files, and
-changes the global PTT key. The LiveKit tray icon reopens the window or exits the
-service. Use **Status and diagnostics** for the PID and startup log, and remove it with
-**Uninstall LiveKit Companion** or **Windows Settings → Apps → Installed apps**.
+The **LiveKit Companion** shortcut starts the background service and opens its own
+local control window with the LiveKit taskbar icon. It manages trusted voice-chat site
+origins, lists active rooms, accepts magnet links and `.torrent` files, and changes the
+global PTT key. The LiveKit tray icon reopens the window or exits the service. Use
+**Status and diagnostics** for the PID and startup log, and remove it with **Uninstall
+LiveKit Companion** or **Windows Settings → Apps → Installed apps**.
 
 On the first connection from a remote voice-chat origin, Chrome or Edge may first ask
 for local-network access. The companion then asks the user to approve that site in a
 Windows dialog. The decision is stored locally and gates both PTT and torrent commands.
+If that dialog does not appear, enter the full deployed site URL in the control panel's
+**Server connection** section and choose **Trust server**. Saved origins can also be
+opened or removed there.
 `127.0.0.1:7331` means the user's own PC, not the deployed web server. Managed manual
 installations can still set an exact `COMPANION_ORIGINS` allowlist to disable the
 companion's interactive approval.

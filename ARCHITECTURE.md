@@ -225,17 +225,20 @@ redirects to `LiveKitCompanionSetup.exe` in a rolling GitHub Release, so the Nex
 server does not build or store binaries. A Windows GitHub Actions job packages Node.js,
 the companion, its dependencies, shortcuts, and autostart support with Inno Setup. The
 same job builds the user-facing `LiveKitCompanion.exe` launcher and the internal
-`LiveKitCompanionNative.exe` key/tray helper from repository C# source with .NET Native
-AOT. A generated multi-resolution LiveKit ICO is embedded in both binaries and the
-installer.
+`LiveKitCompanionNative.exe` key/tray helper from repository C# source. The launcher is
+a self-contained WinForms application with WebView2; the small internal helper uses
+.NET Native AOT. A generated multi-resolution LiveKit ICO is embedded in both binaries
+and the installer.
 
 The companion also serves a token-protected control UI on `127.0.0.1:7333`. It accepts
 magnet links and `.torrent` files for active rooms, exposes remote playback controls,
-and captures and immediately persists the PTT key. Desktop, Start-menu, post-install, and
-autostart entries all target `LiveKitCompanion.exe`; the launcher starts the bundled
-Node process directly and opens the UI in an app-style Edge window. No CMD or VBS
-launcher is installed. The internal helper owns the LiveKit tray icon and can request
-an orderly Node shutdown.
+captures and immediately persists the PTT key, and lets the user add or remove approved
+voice-chat origins. Desktop, Start-menu, post-install, and autostart entries all target
+`LiveKitCompanion.exe`; the launcher starts the bundled Node process directly and hosts
+the localhost UI in its own WebView2 window, so the taskbar owner and icon are the
+Companion rather than the default browser. No CMD or VBS launcher is installed. The
+installer bootstraps the official WebView2 Runtime only when it is absent. The internal
+helper owns the LiveKit tray icon and can request an orderly Node shutdown.
 
 The PTT helper polls only the configured Windows virtual key. It replaces the previous
 third-party global keyboard hook and does not enumerate other keys or collect typed
@@ -248,8 +251,10 @@ before publishing the installer.
 
 On first contact from a remote browser origin, the companion displays a native Windows
 approval dialog. Approved origins are persisted per user and receive both PTT and
-torrent capabilities. An explicit `COMPANION_ORIGINS` environment allowlist remains
-authoritative for managed installations.
+torrent capabilities. The same persisted allowlist can be managed explicitly from the
+local control UI when the browser dialog is missed or blocked. An explicit
+`COMPANION_ORIGINS` environment allowlist remains authoritative for managed
+installations and disables UI mutation.
 
 This requires a browser with `HTMLMediaElement.captureStream()` and a file codec that
 the browser can decode. Direct/HLS sources must also satisfy the remote origin's CORS

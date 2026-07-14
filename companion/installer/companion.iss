@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.4.0"
+  #define AppVersion "0.5.0"
 #endif
 
 #define AppName "LiveKit Companion"
@@ -48,7 +48,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "startup"; Description: "Start companion when signing in to Windows"; GroupDescription: "Startup:"; Flags: checkedonce
 
 [Files]
-Source: "build\app-launcher\LiveKitCompanion.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "build\app-launcher\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "build\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "build\node.exe"; DestDir: "{app}\runtime"; Flags: ignoreversion
 Source: "build\LICENSE-node.txt"; DestDir: "{app}\runtime"; Flags: ignoreversion
 Source: "build\ptt-helper\LiveKitCompanionNative.exe"; DestDir: "{app}\app\bin"; Flags: ignoreversion
@@ -76,6 +77,7 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\LiveKitCompanion.exe"; Workin
 Name: "{userstartup}\{#AppName}"; Filename: "{app}\LiveKitCompanion.exe"; Parameters: "--startup"; WorkingDir: "{app}"; Tasks: startup; AppUserModelID: "LiveKit.Companion"
 
 [Run]
+Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Installing Microsoft Edge WebView2 Runtime..."; Flags: runhidden waituntilterminated; Check: WebView2RuntimeMissing
 Filename: "{app}\LiveKitCompanion.exe"; Description: "Open {#AppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
@@ -116,4 +118,21 @@ begin
   else if FileExists(LegacyStopScript) then
     Exec(ExpandConstant('{cmd}'), '/C ""' + LegacyStopScript + '""', '', SW_HIDE,
       ewWaitUntilTerminated, ResultCode);
+end;
+
+function HasWebView2Version(RootKey: Integer; SubKey: String): Boolean;
+var
+  Version: String;
+begin
+  Result := RegQueryStringValue(RootKey, SubKey, 'pv', Version) and
+    (Version <> '') and (Version <> '0.0.0.0');
+end;
+
+function WebView2RuntimeMissing: Boolean;
+var
+  ClientKey: String;
+begin
+  ClientKey := 'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+  Result := not HasWebView2Version(HKCU, ClientKey) and
+    not HasWebView2Version(HKLM32, ClientKey);
 end;

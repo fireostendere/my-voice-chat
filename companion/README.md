@@ -42,20 +42,28 @@ then run `LiveKitCompanionSetup.exe`. The installer already contains Node.js and
 dependencies, installs per-user to `%LOCALAPPDATA%\Programs\LiveKitCompanion`, creates
 Start menu and desktop shortcuts, can enable startup with Windows, and starts the
 companion in the background. It does not require a system-wide Node.js installation or
-administrator rights.
+administrator rights. The installer adds the official Microsoft Edge WebView2 Runtime
+only when it is missing.
 
 Opening `LiveKitCompanion.exe` from the desktop or Start menu starts the bundled
-background service, waits for it to become ready, and opens the control panel as an
-app-style window. The user-facing shortcuts point directly to this EXE; there are no
-batch or VBS launchers and no config files to edit. The LiveKit tray icon can reopen
-the panel or exit the service. Use **Uninstall LiveKit Companion** or **Windows
-Settings → Apps → Installed apps** to remove it.
+background service, waits for it to become ready, and opens the control panel in its
+own WinForms/WebView2 window. The window and its taskbar entry belong to
+`LiveKitCompanion.exe` and use the embedded LiveKit icon. The user-facing shortcuts
+point directly to this EXE; there are no batch or VBS launchers and no config files to
+edit. The LiveKit tray icon can reopen the panel or exit the service. Use **Uninstall
+LiveKit Companion** or **Windows Settings → Apps → Installed apps** to remove it.
 
 The first time a deployed voice-chat site connects, Chrome or Edge may ask to access
 devices on the local network; allow it so the page can reach the app on this PC. The
 companion then displays its own Windows approval dialog. Verify the site origin and
 choose **Yes**. The companion remembers approved origins under
 `%LOCALAPPDATA%\LiveKitCompanion`.
+
+The **Server connection** panel is the manual alternative to that dialog. Enter the
+full HTTP(S) URL of the deployed voice-chat site, for example
+`https://api.iroslyakov.com/`, and choose **Trust server**. The normalized origin is
+saved immediately; the same panel lists, opens, and removes saved origins. This is the
+web-app origin, not the LiveKit WebSocket URL, API key, or API secret.
 
 The control panel lists active voice-chat rooms. Choose a `.torrent` file or paste a
 magnet link to start it in the selected room, then use the same panel to play, pause,
@@ -149,8 +157,9 @@ and WebM are the most portable choices; MKV and HEVC support varies by browser a
 ## Security
 
 - All companion servers bind to `127.0.0.1` and are not reachable from the LAN.
-- The control API uses an in-memory random token and same-origin checks. Its window is
-  a localhost web UI, not a remotely hosted page.
+- The control API uses an in-memory random token and same-origin checks. Its native
+  window embeds only the localhost web UI, not a remotely hosted page; external links
+  open in the default browser.
 - Torrent stream paths contain a random token.
 - `LiveKitCompanionNative.exe` polls only the configured virtual key. It does not
   install a global keyboard hook, enumerate other keys, collect typed characters, or

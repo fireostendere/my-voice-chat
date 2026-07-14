@@ -65,4 +65,42 @@ describe('origin approval', () => {
     await expect(approver.isAllowed('https://evil.example.com')).resolves.toBe(false);
     expect(save).not.toHaveBeenCalled();
   });
+
+  it('lets the local control panel add and remove a trusted site without a prompt', async () => {
+    const save = vi.fn(async () => {});
+    const prompt = vi.fn();
+    const approver = createOriginApprover({
+      load: vi.fn(async () => []),
+      save,
+      prompt,
+    });
+
+    await expect(approver.allow('https://api.iroslyakov.com/rooms/cinema')).resolves.toBe(
+      'https://api.iroslyakov.com',
+    );
+    await expect(approver.listAllowed()).resolves.toEqual(['https://api.iroslyakov.com']);
+    await expect(approver.isAllowed('https://api.iroslyakov.com')).resolves.toBe(true);
+    expect(prompt).not.toHaveBeenCalled();
+    expect(save).toHaveBeenLastCalledWith(['https://api.iroslyakov.com']);
+
+    await expect(approver.revoke('https://api.iroslyakov.com')).resolves.toBe(
+      'https://api.iroslyakov.com',
+    );
+    await expect(approver.listAllowed()).resolves.toEqual([]);
+    expect(save).toHaveBeenLastCalledWith([]);
+  });
+
+  it('does not let the local control panel override a managed allowlist', async () => {
+    const approver = createOriginApprover({
+      configuredOrigins: ['https://chat.example.com'],
+      load: vi.fn(async () => []),
+      save: vi.fn(),
+      prompt: vi.fn(),
+    });
+
+    expect(approver.managed).toBe(true);
+    await expect(approver.listAllowed()).resolves.toEqual(['https://chat.example.com']);
+    await expect(approver.allow('https://other.example.com')).rejects.toThrow('COMPANION_ORIGINS');
+    await expect(approver.revoke('https://chat.example.com')).rejects.toThrow('COMPANION_ORIGINS');
+  });
 });

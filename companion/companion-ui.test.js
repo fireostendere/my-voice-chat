@@ -67,6 +67,17 @@ describe('companion UI playback controls', () => {
 describe('companion UI server', () => {
   it('serves the local UI and protects its API with a token and origin check', async () => {
     const setPttKey = vi.fn((key) => key);
+    const approvedOrigins = [];
+    const approveOrigin = vi.fn(async (origin) => {
+      const normalized = new URL(origin).origin;
+      approvedOrigins.push(normalized);
+      return normalized;
+    });
+    const revokeOrigin = vi.fn(async (origin) => {
+      const normalized = new URL(origin).origin;
+      approvedOrigins.splice(approvedOrigins.indexOf(normalized), 1);
+      return normalized;
+    });
     const controlPlayback = vi.fn().mockResolvedValue({
       accepted: true,
       message: 'Playback control applied.',
@@ -77,6 +88,9 @@ describe('companion UI server', () => {
       setPttKey,
       supportedKeys: ['F8', 'F9'],
       roomRegistry: { listRooms: () => [], openTorrent: vi.fn(), controlPlayback },
+      listApprovedOrigins: async () => approvedOrigins,
+      approveOrigin,
+      revokeOrigin,
       uiDir: path.join(process.cwd(), 'companion', 'ui'),
     });
     const page = await dispatch(server, '/');
@@ -90,6 +104,8 @@ describe('companion UI server', () => {
       pttKey: 'F8',
       supportedKeys: ['F8', 'F9'],
       rooms: [],
+      approvedOrigins: [],
+      originsManaged: false,
     });
 
     await expect(
@@ -101,6 +117,36 @@ describe('companion UI server', () => {
       ),
     ).rejects.toThrow('Invalid origin');
     expect(setPttKey).not.toHaveBeenCalled();
+
+    const approved = await dispatch(
+      server,
+      '/api/settings/origin',
+      {
+        'X-Companion-Token': token,
+        Origin: 'http://127.0.0.1:7333',
+      },
+      JSON.stringify({ origin: 'https://api.iroslyakov.com/room/cinema' }),
+    );
+    expect(JSON.parse(approved.body)).toEqual({
+      origin: 'https://api.iroslyakov.com',
+      approvedOrigins: ['https://api.iroslyakov.com'],
+    });
+    expect(approveOrigin).toHaveBeenCalledWith('https://api.iroslyakov.com/room/cinema');
+
+    const revoked = await dispatch(
+      server,
+      '/api/settings/origin',
+      {
+        'X-Companion-Token': token,
+        Origin: 'http://127.0.0.1:7333',
+      },
+      JSON.stringify({ origin: 'https://api.iroslyakov.com' }),
+      'DELETE',
+    );
+    expect(JSON.parse(revoked.body)).toEqual({
+      origin: 'https://api.iroslyakov.com',
+      approvedOrigins: [],
+    });
 
     const playback = await dispatch(
       server,
@@ -119,9 +165,9 @@ describe('companion UI server', () => {
   });
 });
 
-async function dispatch(server, pathname, headers = {}, body) {
+async function dispatch(server, pathname, headers = {}, body, method) {
   const request = Readable.from(body === undefined ? [] : [Buffer.from(body)]);
-  request.method = body === undefined ? 'GET' : 'POST';
+  request.method = method || (body === undefined ? 'GET' : 'POST');
   request.url = pathname;
   request.headers = Object.fromEntries([
     ['host', `127.0.0.1:${server.port}`],

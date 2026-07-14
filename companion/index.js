@@ -135,6 +135,10 @@ const uiServer = new CompanionUiServer({
   },
   supportedKeys: SUPPORTED_KEYS,
   roomRegistry,
+  listApprovedOrigins: () => originApprover.listAllowed(),
+  approveOrigin: (value) => originApprover.allow(value),
+  revokeOrigin: (value) => originApprover.revoke(value),
+  originsManaged: originApprover.managed,
   uiDir: path.join(__dirname, 'ui'),
 });
 uiServer.start().catch((error) => {

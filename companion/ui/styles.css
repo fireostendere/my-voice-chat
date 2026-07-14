@@ -250,6 +250,112 @@ select {
   animation: reveal 480ms ease-out both;
 }
 
+.connection-panel {
+  grid-column: 1 / -1;
+  animation-delay: 110ms;
+}
+
+.connection-heading {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+}
+
+.connection-mode {
+  align-self: center;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid rgba(125, 219, 154, 0.25);
+  border-radius: 999px;
+  color: var(--green);
+  background: rgba(125, 219, 154, 0.08);
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.connection-mode.managed {
+  border-color: rgba(255, 177, 74, 0.3);
+  color: #ffb14a;
+  background: rgba(255, 177, 74, 0.08);
+}
+
+.server-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(10rem, 0.25fr);
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.server-form .server-save {
+  min-height: 3rem;
+  margin: 0;
+}
+
+.origin-list {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+}
+
+.origin-empty {
+  padding: 0.8rem 0.9rem;
+  border: 1px dashed var(--line);
+  border-radius: 0.7rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.origin-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid rgba(125, 219, 154, 0.2);
+  border-radius: 0.72rem;
+  background: rgba(125, 219, 154, 0.05);
+}
+
+.origin-row > i {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 10px rgba(125, 219, 154, 0.65);
+}
+
+.origin-row strong {
+  overflow: hidden;
+  font:
+    0.74rem Consolas,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.origin-row button {
+  border: 0;
+  color: var(--coral);
+  background: transparent;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+}
+
+.origin-row button:hover {
+  color: var(--paper);
+}
+
+.origin-row button[data-origin-action='remove'] {
+  color: var(--muted);
+}
+
+.connection-note {
+  margin: 0.75rem 0 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
 .torrent-panel {
   animation-delay: 130ms;
 }
@@ -773,6 +879,22 @@ footer button {
 
   .workspace {
     grid-template-columns: 1fr;
+  }
+
+  .connection-panel {
+    grid-column: auto;
+  }
+
+  .server-form {
+    grid-template-columns: 1fr;
+  }
+
+  .origin-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .origin-row button[data-origin-action='remove'] {
+    grid-column: 3;
   }
 
   .playback-panel {

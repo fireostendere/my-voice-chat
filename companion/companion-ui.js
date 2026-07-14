@@ -9,12 +9,27 @@ const { parseTorrentInput } = require('./torrent-core');
 const MAX_BODY_BYTES = 3 * 1024 * 1024;
 
 class CompanionUiServer {
-  constructor({ port, getPttKey, setPttKey, supportedKeys, roomRegistry, uiDir }) {
+  constructor({
+    port,
+    getPttKey,
+    setPttKey,
+    supportedKeys,
+    roomRegistry,
+    listApprovedOrigins = async () => [],
+    approveOrigin,
+    revokeOrigin,
+    originsManaged = false,
+    uiDir,
+  }) {
     this.port = port;
     this.getPttKey = getPttKey;
     this.setPttKey = setPttKey;
     this.supportedKeys = supportedKeys;
     this.roomRegistry = roomRegistry;
+    this.listApprovedOrigins = listApprovedOrigins;
+    this.approveOrigin = approveOrigin;
+    this.revokeOrigin = revokeOrigin;
+    this.originsManaged = originsManaged;
     this.uiDir = uiDir;
     this.token = crypto.randomBytes(24).toString('base64url');
     this.server = http.createServer((request, response) => {
@@ -88,6 +103,8 @@ class CompanionUiServer {
         pttKey: this.getPttKey(),
         supportedKeys: this.supportedKeys,
         rooms: this.roomRegistry.listRooms(),
+        approvedOrigins: await this.listApprovedOrigins(),
+        originsManaged: this.originsManaged,
       });
       return;
     }
@@ -96,6 +113,28 @@ class CompanionUiServer {
       const body = await readJson(request, 4096);
       const key = await this.setPttKey(body.key);
       this.sendJson(response, 200, { pttKey: key });
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/api/settings/origin') {
+      this.requireSameOrigin(request);
+      if (!this.approveOrigin) throw httpError(501, 'Manual server configuration is unavailable.');
+      const body = await readJson(request, 4096);
+      const origin = await this.approveOrigin(body.origin);
+      this.sendJson(response, 200, {
+        origin,
+        approvedOrigins: await this.listApprovedOrigins(),
+      });
+      return;
+    }
+    if (request.method === 'DELETE' && url.pathname === '/api/settings/origin') {
+      this.requireSameOrigin(request);
+      if (!this.revokeOrigin) throw httpError(501, 'Manual server configuration is unavailable.');
+      const body = await readJson(request, 4096);
+      const origin = await this.revokeOrigin(body.origin);
+      this.sendJson(response, 200, {
+        origin,
+        approvedOrigins: await this.listApprovedOrigins(),
+      });
       return;
     }
     if (request.method === 'POST' && url.pathname === '/api/torrent') {

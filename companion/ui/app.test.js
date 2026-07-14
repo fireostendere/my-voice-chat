@@ -1,11 +1,17 @@
 import { fireEvent, waitFor } from '@testing-library/dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 function installUi() {
   document.body.innerHTML = `
     <meta name="companion-token" content="test-token" />
     <select id="room-select"></select>
     <span id="room-count"></span>
+    <form id="server-form">
+      <input id="server-origin-input" />
+      <button id="save-origin-button"><span></span></button>
+    </form>
+    <div id="approved-origin-list"></div>
+    <span id="connection-mode"></span>
     <button id="key-capture-button" disabled>
       <span id="key-capture-state"></span>
       <strong id="key-display"></strong>
@@ -36,6 +42,8 @@ beforeEach(() => {
   vi.spyOn(window, 'setInterval').mockImplementation(() => 0);
 });
 
+afterEach(() => vi.restoreAllMocks());
+
 describe('companion talk-key capture', () => {
   it('captures physical keyboard and mouse keys, saves immediately, and lets Esc cancel', async () => {
     let activeKey = 'F8';
@@ -48,6 +56,8 @@ describe('companion talk-key capture', () => {
         ok: true,
         json: async () => ({
           rooms: [],
+          approvedOrigins: [],
+          originsManaged: false,
           supportedKeys: ['F8', 'Q', 'XBUTTON1'],
           pttKey: activeKey,
         }),
@@ -75,5 +85,52 @@ describe('companion talk-key capture', () => {
     fireEvent.keyDown(window, { code: 'Escape', key: 'Escape' });
     expect(display.textContent).toBe('Mouse 4');
     expect(fetchMock).toHaveBeenCalledTimes(requestCount);
+  });
+});
+
+describe('companion trusted server settings', () => {
+  it('adds and removes a voice-chat origin from the local GUI', async () => {
+    let approvedOrigins = [];
+    const fetchMock = vi.fn(async (path, options = {}) => {
+      if (path === '/api/settings/origin') {
+        const origin = new URL(JSON.parse(options.body).origin).origin;
+        approvedOrigins = options.method === 'DELETE' ? [] : [origin];
+        return { ok: true, json: async () => ({ origin, approvedOrigins }) };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          rooms: [],
+          approvedOrigins,
+          originsManaged: false,
+          supportedKeys: ['F8'],
+          pttKey: 'F8',
+        }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await import('./app.js');
+    const input = document.querySelector('#server-origin-input');
+    const form = document.querySelector('#server-form');
+    const list = document.querySelector('#approved-origin-list');
+    await waitFor(() => expect(input.disabled).toBe(false));
+
+    fireEvent.input(input, { target: { value: 'https://api.iroslyakov.com/rooms/cinema' } });
+    fireEvent.submit(form);
+    await waitFor(() => expect(list.textContent).toContain('https://api.iroslyakov.com'));
+    const addRequest = fetchMock.mock.calls.find(
+      ([path, options]) => path === '/api/settings/origin' && options.method === 'POST',
+    );
+    expect(JSON.parse(addRequest[1].body)).toEqual({
+      origin: 'https://api.iroslyakov.com/rooms/cinema',
+    });
+
+    fireEvent.click(list.querySelector('button[data-origin-action="remove"]'));
+    await waitFor(() => expect(list.textContent).toContain('No trusted server'));
+    expect(fetchMock.mock.calls).toContainEqual([
+      '/api/settings/origin',
+      expect.objectContaining({ method: 'DELETE' }),
+    ]);
   });
 });

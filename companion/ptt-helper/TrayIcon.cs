@@ -197,29 +197,21 @@ internal sealed class TrayIcon : IDisposable
     {
         try
         {
-            var edge = FindEdge();
-            var startInfo = edge is null
-                ? new ProcessStartInfo(uiUrl) { UseShellExecute = true }
-                : new ProcessStartInfo(edge) { UseShellExecute = true };
-            if (edge is not null) startInfo.ArgumentList.Add($"--app={uiUrl}");
+            var launcher = Path.GetFullPath(Path.Combine(
+                AppContext.BaseDirectory,
+                "..",
+                "..",
+                "LiveKitCompanion.exe"));
+            var startInfo = File.Exists(launcher)
+                ? new ProcessStartInfo(launcher) { UseShellExecute = true }
+                : new ProcessStartInfo(uiUrl) { UseShellExecute = true };
+            if (File.Exists(launcher)) startInfo.ArgumentList.Add("--open");
             Process.Start(startInfo);
         }
         catch (Exception error)
         {
             Console.Error.WriteLine($"Could not open companion UI: {error.Message}");
         }
-    }
-
-    private static string? FindEdge()
-    {
-        var candidates = new[]
-        {
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-                "Microsoft", "Edge", "Application", "msedge.exe"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-                "Microsoft", "Edge", "Application", "msedge.exe"),
-        };
-        return candidates.FirstOrDefault(File.Exists);
     }
 
     private static Exception Win32Failure(string operation) =>

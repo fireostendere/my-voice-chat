@@ -50,7 +50,7 @@ jobs:
       - name: Build native app and limited PTT helper
         run: |
           $version = node -p "require('./companion/package.json').version"
-          dotnet publish companion/app-launcher/LiveKitCompanion.csproj -c Release -r win-x64 -o companion/installer/build/app-launcher -p:Version=$version
+          dotnet publish companion/app-launcher/LiveKitCompanion.csproj -c Release -r win-x64 -o companion/installer/build/app-launcher -p:Version=$version -p:DebugType=None -p:DebugSymbols=false
           dotnet publish companion/ptt-helper/PttKeyState.csproj -c Release -r win-x64 -o companion/installer/build/ptt-helper -p:Version=$version
 
       - name: Prepare portable runtime
@@ -67,6 +67,16 @@ jobs:
           $app = 'companion/installer/build/app-launcher/LiveKitCompanion.exe'
           if (-not (Test-Path $app)) {
             throw "Native companion app is missing: $app"
+          }
+          $webViewLoader = Get-ChildItem 'companion/installer/build/app-launcher' -Filter 'WebView2Loader.dll' -Recurse
+          if (-not $webViewLoader) {
+            throw 'WebView2Loader.dll is missing from the native companion window.'
+          }
+          $webViewBootstrapper = 'companion/installer/build/MicrosoftEdgeWebview2Setup.exe'
+          Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $webViewBootstrapper
+          $signature = Get-AuthenticodeSignature $webViewBootstrapper
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft') {
+            throw 'The WebView2 bootstrapper does not have a valid Microsoft signature.'
           }
 
       - name: Compile EXE installer
@@ -152,6 +162,14 @@ jobs:
           $helper = Get-CimInstance Win32_Process -Filter "Name = 'LiveKitCompanionNative.exe'" |
             Where-Object { $_.ExecutablePath -like "$installDir*" }
           if (-not $helper) { throw 'Native PTT and tray helper is not running.' }
+
+          $windowSmoke = Start-Process $app -ArgumentList '--window-smoke-test' -PassThru
+          try {
+            Wait-ProcessOrThrow $windowSmoke 45 'Native Companion control window'
+          } catch {
+            if (Test-Path $logFile) { Get-Content $logFile }
+            throw
+          }
 
           $stop = Start-Process $app -ArgumentList '--stop' -PassThru
           Wait-ProcessOrThrow $stop 30 'Companion stop'

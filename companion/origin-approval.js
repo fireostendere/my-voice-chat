@@ -50,7 +50,39 @@ function createOriginApprover({ configuredOrigins = [], load, save, prompt }) {
     return approval;
   };
 
-  return { isAllowed };
+  const listAllowed = async () =>
+    [...(configured.size > 0 ? configured : await loadStored())].sort();
+
+  const allow = async (value) => {
+    const origin = normalizeOrigin(value);
+    if (!origin) throw new Error('Enter a valid HTTP or HTTPS voice-chat address.');
+    if (configured.size > 0) {
+      if (configured.has(origin)) return origin;
+      throw new Error('Trusted sites are managed by COMPANION_ORIGINS.');
+    }
+    if (isLoopbackOrigin(origin)) return origin;
+
+    const stored = await loadStored();
+    if (!stored.has(origin)) {
+      stored.add(origin);
+      await save([...stored].sort());
+    }
+    return origin;
+  };
+
+  const revoke = async (value) => {
+    const origin = normalizeOrigin(value);
+    if (!origin) throw new Error('Invalid voice-chat address.');
+    if (configured.size > 0) {
+      throw new Error('Trusted sites are managed by COMPANION_ORIGINS.');
+    }
+
+    const stored = await loadStored();
+    if (stored.delete(origin)) await save([...stored].sort());
+    return origin;
+  };
+
+  return { allow, isAllowed, listAllowed, managed: configured.size > 0, revoke };
 }
 
 function createFileOriginApprover({ configuredOrigins = [], dataDir = companionDataDir() } = {}) {
@@ -83,11 +115,8 @@ function promptForOrigin(origin) {
   const helperPath = path.join(__dirname, 'bin', 'LiveKitCompanionNative.exe');
 
   return new Promise((resolve) => {
-    execFile(
-      helperPath,
-      ['--approve-origin', origin],
-      { windowsHide: true },
-      (error) => resolve(!error),
+    execFile(helperPath, ['--approve-origin', origin], { windowsHide: true }, (error) =>
+      resolve(!error),
     );
   });
 }

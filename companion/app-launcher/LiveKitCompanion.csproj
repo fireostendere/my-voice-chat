@@ -1,20 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <AssemblyName>LiveKitCompanion</AssemblyName>
     <RootNamespace>LiveKitCompanion.App</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <PublishAot>true</PublishAot>
     <SelfContained>true</SelfContained>
-    <InvariantGlobalization>true</InvariantGlobalization>
-    <StripSymbols>true</StripSymbols>
-    <OptimizationPreference>Size</OptimizationPreference>
+    <PublishTrimmed>false</PublishTrimmed>
     <ApplicationIcon>..\assets\livekit-companion.ico</ApplicationIcon>
     <AssemblyTitle>LiveKit Companion</AssemblyTitle>
     <Product>LiveKit Companion</Product>
     <Description>Local media and push-to-talk companion for LiveKit</Description>
     <Company>fireostendere</Company>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
+  </ItemGroup>
+  <Target Name="RemoveUnusedWebView2WpfReference" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
 </Project>

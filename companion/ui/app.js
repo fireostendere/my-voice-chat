@@ -3,6 +3,11 @@
 const token = document.querySelector('meta[name="companion-token"]').content;
 const roomSelect = document.querySelector('#room-select');
 const roomCount = document.querySelector('#room-count');
+const serverForm = document.querySelector('#server-form');
+const serverOriginInput = document.querySelector('#server-origin-input');
+const saveOriginButton = document.querySelector('#save-origin-button');
+const approvedOriginList = document.querySelector('#approved-origin-list');
+const connectionMode = document.querySelector('#connection-mode');
 const keyDisplay = document.querySelector('#key-display');
 const keyCaptureButton = document.querySelector('#key-capture-button');
 const keyCaptureState = document.querySelector('#key-capture-state');
@@ -25,6 +30,8 @@ const refreshButton = document.querySelector('#refresh-button');
 const toast = document.querySelector('#toast');
 
 let rooms = [];
+let approvedOrigins = [];
+let originsManaged = false;
 let selectedFile = null;
 let toastTimer;
 let keyCaptureFeedbackTimer;
@@ -54,7 +61,10 @@ async function refreshStatus({ quiet = false } = {}) {
   try {
     const status = await api('/api/status');
     rooms = status.rooms;
+    approvedOrigins = status.approvedOrigins || [];
+    originsManaged = status.originsManaged === true;
     renderRooms();
+    renderOrigins();
     renderKeys(status.supportedKeys, status.pttKey);
     if (!quiet) showToast('Companion status refreshed.');
   } catch (error) {
@@ -89,6 +99,88 @@ function renderKeys(keys, currentKey) {
   if (!capturingKey && !savingKey) {
     configuredPttKey = currentKey;
     renderIdleKeyBinding();
+  }
+}
+
+function renderOrigins() {
+  approvedOriginList.replaceChildren();
+  connectionMode.textContent = originsManaged ? 'MANAGED' : 'MANUAL';
+  connectionMode.classList.toggle('managed', originsManaged);
+  serverOriginInput.disabled = originsManaged;
+  saveOriginButton.disabled = originsManaged;
+
+  if (approvedOrigins.length === 0) {
+    const empty = document.createElement('span');
+    empty.className = 'origin-empty';
+    empty.textContent = originsManaged
+      ? 'COMPANION_ORIGINS does not contain any valid sites.'
+      : 'No trusted server configured yet.';
+    approvedOriginList.append(empty);
+    return;
+  }
+
+  for (const origin of approvedOrigins) {
+    const row = document.createElement('div');
+    row.className = 'origin-row';
+
+    const indicator = document.createElement('i');
+    indicator.setAttribute('aria-hidden', 'true');
+    const label = document.createElement('strong');
+    label.textContent = origin;
+    label.title = origin;
+    const openButton = document.createElement('button');
+    openButton.type = 'button';
+    openButton.dataset.originAction = 'open';
+    openButton.dataset.origin = origin;
+    openButton.textContent = 'OPEN SITE';
+    row.append(indicator, label, openButton);
+
+    if (!originsManaged) {
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.dataset.originAction = 'remove';
+      removeButton.dataset.origin = origin;
+      removeButton.textContent = 'REMOVE';
+      row.append(removeButton);
+    }
+    approvedOriginList.append(row);
+  }
+}
+
+async function saveOrigin() {
+  const origin = serverOriginInput.value.trim();
+  if (!origin || originsManaged) return;
+  saveOriginButton.disabled = true;
+  saveOriginButton.querySelector('span').textContent = 'Saving…';
+  try {
+    const result = await api('/api/settings/origin', {
+      method: 'POST',
+      body: JSON.stringify({ origin }),
+    });
+    approvedOrigins = result.approvedOrigins;
+    serverOriginInput.value = '';
+    renderOrigins();
+    showToast(`${result.origin} is now trusted. Open a room there to connect it.`);
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    saveOriginButton.querySelector('span').textContent = 'Trust server';
+    saveOriginButton.disabled = originsManaged;
+  }
+}
+
+async function removeOrigin(origin) {
+  if (originsManaged) return;
+  try {
+    const result = await api('/api/settings/origin', {
+      method: 'DELETE',
+      body: JSON.stringify({ origin }),
+    });
+    approvedOrigins = result.approvedOrigins;
+    renderOrigins();
+    showToast(`${result.origin} was removed from trusted servers.`);
+  } catch (error) {
+    showToast(error.message, true);
   }
 }
 
@@ -432,6 +524,20 @@ roomSelect.addEventListener('change', () => {
   seeking = false;
   updatePlayButton();
   renderPlayback();
+});
+serverForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void saveOrigin();
+});
+approvedOriginList.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-origin-action]');
+  if (!button) return;
+  const origin = button.dataset.origin;
+  if (button.dataset.originAction === 'open') {
+    window.open(origin, '_blank', 'noopener,noreferrer');
+  } else if (button.dataset.originAction === 'remove') {
+    void removeOrigin(origin);
+  }
 });
 keyCaptureButton.addEventListener('click', toggleKeyCapture);
 window.addEventListener(

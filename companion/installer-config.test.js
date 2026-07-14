@@ -13,7 +13,10 @@ describe('companion installer lifecycle', () => {
     expect(manifest).toContain('Uninstallable=yes');
     expect(manifest).toContain('Uninstall {#AppName}');
     expect(manifest).toContain('SetupIconFile=..\\assets\\livekit-companion.ico');
-    expect(manifest).toContain('build\\app-launcher\\LiveKitCompanion.exe');
+    expect(manifest).toContain('build\\app-launcher\\*');
+    expect(manifest).toContain('MicrosoftEdgeWebview2Setup.exe');
+    expect(manifest).toContain('/silent /install');
+    expect(manifest).toContain('WebView2RuntimeMissing');
     expect(manifest).toContain('Filename: "{app}\\LiveKitCompanion.exe"');
     expect(manifest).toContain('Parameters: "--startup"');
     expect(manifest).toContain('Parameters: "--stop"');
@@ -22,15 +25,31 @@ describe('companion installer lifecycle', () => {
     expect(manifest).not.toContain('Source: "start-companion.cmd"');
   });
 
-  it('starts the packaged service and opens its app window from the native EXE', () => {
+  it('starts the packaged service and owns a WebView2 control window with the LK icon', () => {
     const launcher = readFileSync(
       path.join(process.cwd(), 'companion', 'app-launcher', 'Program.cs'),
+      'utf8',
+    );
+    const appProject = readFileSync(
+      path.join(process.cwd(), 'companion', 'app-launcher', 'LiveKitCompanion.csproj'),
+      'utf8',
+    );
+    const tray = readFileSync(
+      path.join(process.cwd(), 'companion', 'ptt-helper', 'TrayIcon.cs'),
       'utf8',
     );
 
     expect(launcher).toContain('StartBackend()');
     expect(launcher).toContain('COMPANION_LOG_FILE');
-    expect(launcher).toContain('--app={UiUrl}');
+    expect(launcher).toContain('ControlPanelWindow');
+    expect(launcher).toContain('Application.Run(window)');
+    expect(launcher).toContain('Icon.ExtractAssociatedIcon');
+    expect(launcher).not.toContain('--app=');
+    expect(appProject).toContain('Microsoft.Web.WebView2');
+    expect(appProject).toContain('<UseWindowsForms>true</UseWindowsForms>');
+    expect(tray).toContain('LiveKitCompanion.exe');
+    expect(tray).toContain('startInfo.ArgumentList.Add("--open")');
+    expect(tray).not.toContain('--app=');
     expect(launcher).toContain('WaitForUi');
     expect(launcher).toContain('StopCompanion');
   });
