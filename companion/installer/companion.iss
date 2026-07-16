@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.5.0"
+  #define AppVersion "0.6.0"
 #endif
 
 #define AppName "LiveKit Companion"
@@ -36,7 +36,7 @@ UninstallDisplayIcon={app}\LiveKitCompanion.exe
 SetupIconFile=..\assets\livekit-companion.ico
 VersionInfoVersion={#AppVersion}
 VersionInfoCompany={#AppPublisher}
-VersionInfoDescription=Local companion for LiveKit voice chat
+VersionInfoDescription=Windows WebView2 client for LiveKit voice chat
 VersionInfoProductName={#AppName}
 VersionInfoProductVersion={#AppVersion}
 
@@ -54,6 +54,7 @@ Source: "build\node.exe"; DestDir: "{app}\runtime"; Flags: ignoreversion
 Source: "build\LICENSE-node.txt"; DestDir: "{app}\runtime"; Flags: ignoreversion
 Source: "build\ptt-helper\LiveKitCompanionNative.exe"; DestDir: "{app}\app\bin"; Flags: ignoreversion
 Source: "..\index.js"; DestDir: "{app}\app"; Flags: ignoreversion
+Source: "..\client-config.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\origin-approval.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\origin-core.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\ptt-key-listener.js"; DestDir: "{app}\app"; Flags: ignoreversion

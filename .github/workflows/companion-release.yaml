@@ -1,4 +1,4 @@
-name: Build companion installer
+name: Build Windows Companion client installer
 
 on:
   pull_request:
@@ -47,10 +47,23 @@ jobs:
       - name: Generate Windows icon
         run: node companion/scripts/generate-icon.js
 
-      - name: Build native app and limited PTT helper
+      - name: Build desktop client and limited PTT helper
+        env:
+          BUILD_COMPANION_WEB_APP_URL: ${{ vars.COMPANION_WEB_APP_URL }}
         run: |
           $version = node -p "require('./companion/package.json').version"
-          dotnet publish companion/app-launcher/LiveKitCompanion.csproj -c Release -r win-x64 -o companion/installer/build/app-launcher -p:Version=$version -p:DebugType=None -p:DebugSymbols=false
+          $webAppUrl = $env:BUILD_COMPANION_WEB_APP_URL
+          if ([string]::IsNullOrWhiteSpace($webAppUrl)) {
+            $webAppUrl = 'https://api.iroslyakov.com/'
+          }
+          $parsedWebAppUrl = $null
+          if (-not [Uri]::TryCreate($webAppUrl, [UriKind]::Absolute, [ref]$parsedWebAppUrl) -or
+              $parsedWebAppUrl.Scheme -ne 'https' -or
+              -not [string]::IsNullOrEmpty($parsedWebAppUrl.UserInfo)) {
+            throw 'COMPANION_WEB_APP_URL must be an HTTPS URL without embedded credentials.'
+          }
+          $webAppUrl = "$($parsedWebAppUrl.GetLeftPart([UriPartial]::Authority))/"
+          dotnet publish companion/app-launcher/LiveKitCompanion.csproj -c Release -r win-x64 -o companion/installer/build/app-launcher -p:Version=$version -p:DebugType=None -p:DebugSymbols=false "-p:CompanionWebAppUrl=$webAppUrl"
           dotnet publish companion/ptt-helper/PttKeyState.csproj -c Release -r win-x64 -o companion/installer/build/ptt-helper -p:Version=$version
 
       - name: Prepare portable runtime
@@ -95,7 +108,7 @@ jobs:
           "$checksum  LiveKitCompanionSetup.exe" |
             Set-Content 'companion/dist/LiveKitCompanionSetup.exe.sha256' -Encoding ascii
 
-      - name: Smoke test installer, startup, and uninstaller
+      - name: Smoke test installed WebView2 client, startup, and uninstaller
         shell: pwsh
         run: |
           function Wait-ProcessOrThrow {
@@ -136,39 +149,95 @@ jobs:
           $dataDir = Join-Path $env:LOCALAPPDATA 'LiveKitCompanion'
           $pidFile = Join-Path $dataDir 'companion.pid'
           $logFile = Join-Path $dataDir 'companion.log'
-          $start = Start-Process $app -ArgumentList '--startup' -PassThru
+          $fixturePort = 7340
+          $fixtureUrl = "http://127.0.0.1:$fixturePort/"
+          $fixtureScript = (Resolve-Path 'companion/scripts/webview-smoke-server.js').Path
+          $fixtureLog = Join-Path $env:RUNNER_TEMP 'webview-smoke-fixture.log'
+          $fixtureErrorLog = Join-Path $env:RUNNER_TEMP 'webview-smoke-fixture-error.log'
+          $fixture = Start-Process (Get-Command node).Source `
+            -ArgumentList $fixtureScript, $fixturePort `
+            -RedirectStandardOutput $fixtureLog `
+            -RedirectStandardError $fixtureErrorLog `
+            -NoNewWindow `
+            -PassThru
           try {
-            Wait-ProcessOrThrow $start 30 'Companion app'
-          } catch {
-            if (Test-Path $logFile) { Get-Content $logFile }
-            throw
-          }
-          Start-Sleep -Seconds 4
-          if (-not (Test-Path $pidFile)) {
-            if (Test-Path $logFile) { Get-Content $logFile }
-            throw "Companion did not create its PID file."
-          }
-          $companionPid = [int](Get-Content $pidFile -Raw).Trim()
-          if (-not (Get-Process -Id $companionPid -ErrorAction SilentlyContinue)) {
-            if (Test-Path $logFile) { Get-Content $logFile }
-            throw "Companion process $companionPid is not running."
-          }
-          $ui = Invoke-WebRequest 'http://127.0.0.1:7333/' -UseBasicParsing
-          if ($ui.StatusCode -ne 200 -or
-              $ui.Content -notmatch '<title>LiveKit Companion</title>' -or
-              $ui.Content -notmatch 'id="playback-toggle"') {
-            throw 'Companion UI did not start correctly.'
-          }
-          $helper = Get-CimInstance Win32_Process -Filter "Name = 'LiveKitCompanionNative.exe'" |
-            Where-Object { $_.ExecutablePath -like "$installDir*" }
-          if (-not $helper) { throw 'Native PTT and tray helper is not running.' }
+            $fixtureReady = $false
+            $fixtureDeadline = (Get-Date).AddSeconds(15)
+            while ((Get-Date) -lt $fixtureDeadline) {
+              if ($fixture.HasExited) { break }
+              try {
+                $fixtureHealth = Invoke-WebRequest "${fixtureUrl}health" -UseBasicParsing
+                if ($fixtureHealth.StatusCode -eq 200) {
+                  $fixtureReady = $true
+                  break
+                }
+              } catch {}
+              Start-Sleep -Milliseconds 200
+            }
+            if (-not $fixtureReady) {
+              if (Test-Path $fixtureLog) { Get-Content $fixtureLog }
+              if (Test-Path $fixtureErrorLog) { Get-Content $fixtureErrorLog }
+              throw 'The WebView2 smoke fixture did not become ready.'
+            }
 
-          $windowSmoke = Start-Process $app -ArgumentList '--window-smoke-test' -PassThru
-          try {
-            Wait-ProcessOrThrow $windowSmoke 45 'Native Companion control window'
-          } catch {
-            if (Test-Path $logFile) { Get-Content $logFile }
-            throw
+            $previousWebAppUrl = $env:COMPANION_WEB_APP_URL
+            $env:COMPANION_WEB_APP_URL = $fixtureUrl
+            try {
+              $start = Start-Process $app -ArgumentList '--startup' -PassThru
+            } finally {
+              if ($null -eq $previousWebAppUrl) {
+                Remove-Item Env:COMPANION_WEB_APP_URL -ErrorAction SilentlyContinue
+              } else {
+                $env:COMPANION_WEB_APP_URL = $previousWebAppUrl
+              }
+            }
+            try {
+              Wait-ProcessOrThrow $start 30 'Companion app'
+            } catch {
+              if (Test-Path $logFile) { Get-Content $logFile }
+              throw
+            }
+            Start-Sleep -Seconds 4
+            if (-not (Test-Path $pidFile)) {
+              if (Test-Path $logFile) { Get-Content $logFile }
+              throw "Companion did not create its PID file."
+            }
+            $companionPid = [int](Get-Content $pidFile -Raw).Trim()
+            if (-not (Get-Process -Id $companionPid -ErrorAction SilentlyContinue)) {
+              if (Test-Path $logFile) { Get-Content $logFile }
+              throw "Companion process $companionPid is not running."
+            }
+            $ui = Invoke-WebRequest 'http://127.0.0.1:7333/' -UseBasicParsing
+            if ($ui.StatusCode -ne 200 -or
+                $ui.Content -notmatch '<title>LiveKit Companion</title>' -or
+                $ui.Content -notmatch 'id="playback-toggle"') {
+              throw 'Companion UI did not start correctly.'
+            }
+            $clientConfig = Invoke-RestMethod 'http://127.0.0.1:7333/api/client-config'
+            if ($clientConfig.webAppUrl -ne $fixtureUrl) {
+              throw "Companion returned the wrong web app URL: $($clientConfig.webAppUrl)"
+            }
+            $helper = Get-CimInstance Win32_Process -Filter "Name = 'LiveKitCompanionNative.exe'" |
+              Where-Object { $_.ExecutablePath -like "$installDir*" }
+            if (-not $helper) { throw 'Native PTT and tray helper is not running.' }
+
+            $env:COMPANION_SMOKE_EXPECTED_TITLE = 'LiveKit Companion WebView Smoke OK'
+            try {
+              $windowSmoke = Start-Process $app -ArgumentList '--window-smoke-test' -PassThru
+              Wait-ProcessOrThrow $windowSmoke 45 'Native Companion web client'
+            } catch {
+              if (Test-Path $logFile) { Get-Content $logFile }
+              if (Test-Path $fixtureLog) { Get-Content $fixtureLog }
+              if (Test-Path $fixtureErrorLog) { Get-Content $fixtureErrorLog }
+              throw
+            } finally {
+              Remove-Item Env:COMPANION_SMOKE_EXPECTED_TITLE -ErrorAction SilentlyContinue
+            }
+          } finally {
+            if ($fixture -and -not $fixture.HasExited) {
+              Stop-Process -Id $fixture.Id -Force -ErrorAction SilentlyContinue
+              $fixture.WaitForExit(5000)
+            }
           }
 
           $stop = Start-Process $app -ArgumentList '--stop' -PassThru
@@ -185,7 +254,6 @@ jobs:
             companion/dist/LiveKitCompanionSetup.exe.sha256
           if-no-files-found: error
           retention-days: 7
-
 
   publish-release:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -205,6 +273,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if ! gh release view companion-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release create companion-latest --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "LiveKit Companion" --notes "Windows installer for the local voice-chat companion." --latest
+            gh release create companion-latest --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "LiveKit Companion" --notes "Full Windows WebView2 voice-chat client with local push-to-talk and BitTorrent bridge." --latest
           fi
           gh release upload companion-latest LiveKitCompanionSetup.exe LiveKitCompanionSetup.exe.sha256 --repo "$GITHUB_REPOSITORY" --clobber

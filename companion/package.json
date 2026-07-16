@@ -1,8 +1,8 @@
 {
   "name": "livekit-ptt-companion",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
-  "description": "Local LiveKit companion for global push-to-talk and host-side BitTorrent streaming.",
+  "description": "Windows WebView2 client with local push-to-talk and BitTorrent bridge for LiveKit voice chat.",
   "bin": {
     "livekit-ptt-companion": "index.js"
   },
