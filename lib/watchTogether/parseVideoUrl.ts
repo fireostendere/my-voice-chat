@@ -1,4 +1,9 @@
-export type ParsedVideoUrl = { kind: 'youtube'; videoId: string } | { kind: 'url'; url: string };
+import { isVkVideoHost, parseVkVideoUrl } from './vkVideoUrl';
+
+export type ParsedVideoUrl =
+  | { kind: 'youtube'; videoId: string }
+  | { kind: 'vk'; videoId: string }
+  | { kind: 'url'; url: string };
 
 const YOUTUBE_HOSTS = new Set([
   'youtube.com',
@@ -14,12 +19,17 @@ export function parseVideoUrl(input: string): ParsedVideoUrl | null {
   let parsed: URL;
   try {
     const trimmed = input.trim();
+    if (!trimmed || trimmed.startsWith('//')) return null;
     const hasScheme = /^[a-z][a-z\d+.-]*:/i.test(trimmed);
     parsed = new URL(hasScheme ? trimmed : `https://${trimmed}`);
   } catch {
     return null;
   }
   const host = parsed.hostname.toLowerCase();
+  if (isVkVideoHost(host)) {
+    const videoId = parseVkVideoUrl(parsed);
+    return videoId ? { kind: 'vk', videoId } : null;
+  }
   if (YOUTUBE_HOSTS.has(host)) {
     let id: string | null = null;
     if (host === 'youtu.be') {

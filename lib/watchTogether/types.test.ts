@@ -15,6 +15,15 @@ describe('isWatchSyncMessage', () => {
         ts: 1,
       }),
     ).toBe(true);
+    expect(
+      isWatchSyncMessage({
+        type: 'start-embed',
+        kind: 'vk',
+        src: '-176915579_456248111_65cf2c39222e1b73',
+        hostIdentity: 'host',
+        ts: 1,
+      }),
+    ).toBe(true);
   });
 
   it.each([
@@ -23,6 +32,15 @@ describe('isWatchSyncMessage', () => {
     { type: 'stop', ts: Number.NaN },
     { type: 'heartbeat', kind: 'unknown', ts: 1 },
     { type: 'start-embed', kind: 'url', src: '', hostIdentity: 'host', ts: 1 },
+    {
+      type: 'start-embed',
+      kind: 'vk',
+      src: 'https://vk.ru/video-1_2',
+      hostIdentity: 'host',
+      ts: 1,
+    },
+    { type: 'start-embed', kind: 'youtube', src: 'x', hostIdentity: 'host', ts: 1 },
+    { type: 'start-embed', kind: 'url', src: 'javascript:alert(1)', hostIdentity: 'host', ts: 1 },
   ])('rejects malformed messages', (message) => {
     expect(isWatchSyncMessage(message)).toBe(false);
   });

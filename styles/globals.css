@@ -269,14 +269,14 @@ h2 a {
   line-height: 1;
 }
 
-.lk-watch-together-yt-wrap {
+.lk-watch-together-embed-wrap {
   position: relative;
   width: 100%;
   height: 100%;
 }
 
-.lk-watch-together-yt-frame,
-.lk-watch-together-yt-frame iframe {
+.lk-watch-together-embed-frame,
+.lk-watch-together-embed-frame iframe {
   width: 100%;
   height: 100%;
   border: 0;

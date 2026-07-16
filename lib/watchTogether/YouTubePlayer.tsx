@@ -185,8 +185,8 @@ export function YouTubePlayer({ videoId, hostIdentity, isHost, sendSync, subscri
   const needsGesture = ready && !isHost && shouldPlay && !playing;
 
   return (
-    <div className="lk-watch-together-yt-wrap">
-      <div ref={containerRef} className="lk-watch-together-yt-frame" />
+    <div className="lk-watch-together-embed-wrap">
+      <div ref={containerRef} className="lk-watch-together-embed-frame" />
       {needsGesture && <GestureOverlay onClick={handleGesture} delayed />}
       {!ready && !error && <div className="lk-watch-together-status">Connecting to YouTube…</div>}
       {error && (

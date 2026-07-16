@@ -37,11 +37,12 @@ export function CinemaPanel() {
     }
     const parsed = parseVideoUrl(url.trim());
     if (!parsed) {
-      setError('Enter a direct HTTP(S) video URL or a YouTube URL.');
+      setError('Enter a direct HTTP(S) video URL, a YouTube URL, or a VK Video URL.');
       return;
     }
-    if (parsed.kind === 'youtube') startEmbed('youtube', parsed.videoId);
-    else startEmbed('url', parsed.url);
+    if (parsed.kind === 'youtube' || parsed.kind === 'vk') {
+      startEmbed(parsed.kind, parsed.videoId);
+    } else startEmbed('url', parsed.url);
     setError(null);
     setOpen(false);
   };
@@ -106,7 +107,9 @@ export function CinemaPanel() {
     : embed.active
       ? embed.kind === 'youtube'
         ? 'YouTube'
-        : 'Linked video'
+        : embed.kind === 'vk'
+          ? 'VK Video'
+          : 'Linked video'
       : null;
 
   return (
@@ -159,7 +162,7 @@ export function CinemaPanel() {
                   setError(null);
                 }}
               >
-                Link or YouTube
+                Link, YouTube or VK
               </button>
               <button
                 type="button"
@@ -195,7 +198,7 @@ export function CinemaPanel() {
                     type="text"
                     inputMode="url"
                     autoFocus
-                    placeholder="https://youtu.be/... or https://site/video.m3u8"
+                    placeholder="https://vk.ru/video-…_… or https://youtu.be/…"
                     onChange={(event) => {
                       setUrl(event.target.value);
                       setError(null);
@@ -206,8 +209,8 @@ export function CinemaPanel() {
                   </button>
                 </div>
                 <p className="lk-cinema-hint">
-                  MP4, WebM, Ogg, HLS (.m3u8), and YouTube watch/shorts/embed URLs. Direct video
-                  servers must allow browser playback.
+                  MP4, WebM, Ogg, HLS (.m3u8), YouTube, and VK Video links from vk.ru, vk.com, or
+                  vkvideo.ru. Direct video servers must allow browser playback.
                 </p>
               </form>
             ) : tab === 'file' ? (

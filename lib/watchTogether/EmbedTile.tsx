@@ -3,6 +3,7 @@ import * as React from 'react';
 import { useWatchTogether } from './WatchTogetherContext';
 import { UrlPlayer } from './UrlPlayer';
 import { YouTubePlayer } from './YouTubePlayer';
+import { VkPlayer } from './VkPlayer';
 
 export function EmbedTile() {
   const { embed, stopEmbed, sendSync, subscribe } = useWatchTogether();
@@ -25,6 +26,14 @@ export function EmbedTile() {
           sendSync={sendSync}
           subscribe={subscribe}
         />
+      ) : embed.kind === 'vk' ? (
+        <VkPlayer
+          videoId={embed.src}
+          hostIdentity={embed.hostIdentity}
+          isHost={embed.isHost}
+          sendSync={sendSync}
+          subscribe={subscribe}
+        />
       ) : (
         <UrlPlayer
           src={embed.src}
@@ -37,7 +46,11 @@ export function EmbedTile() {
       <div className="lk-watch-together-overlay">
         <span className="lk-watch-together-source">
           <span className="lk-cinema-live-dot" />
-          {embed.kind === 'youtube' ? 'YouTube' : 'Direct stream'}
+          {embed.kind === 'youtube'
+            ? 'YouTube'
+            : embed.kind === 'vk'
+              ? 'VK Video'
+              : 'Direct stream'}
         </span>
         <span className="lk-watch-together-role">
           {embed.isHost ? 'You control playback' : `Host: ${embed.hostIdentity}`}

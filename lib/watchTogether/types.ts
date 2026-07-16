@@ -1,3 +1,5 @@
+import { isVkVideoSource } from './vkVideoUrl';
+
 export const WATCH_TOGETHER_TOPIC = 'watch-together';
 
 // Hosts broadcast a heartbeat on this cadence while an embed is active.
@@ -7,7 +9,7 @@ export const HEARTBEAT_TIMEOUT_MS = 3 * HEARTBEAT_INTERVAL_MS + 1000;
 // Viewers only re-seek when they drift further than this from the host.
 export const DRIFT_TOLERANCE_S = 0.6;
 
-export type EmbedKind = 'url' | 'youtube';
+export type EmbedKind = 'url' | 'youtube' | 'vk';
 
 export type WatchSyncMessage =
   | { type: 'start-embed'; kind: EmbedKind; src: string; hostIdentity: string; ts: number }
@@ -37,8 +39,7 @@ export function isWatchSyncMessage(value: unknown): value is WatchSyncMessage {
   if (message.type === 'start-embed') {
     return (
       isEmbedKind(message.kind) &&
-      typeof message.src === 'string' &&
-      message.src.length > 0 &&
+      isEmbedSource(message.kind, message.src) &&
       typeof message.hostIdentity === 'string' &&
       message.hostIdentity.length > 0
     );
@@ -46,8 +47,7 @@ export function isWatchSyncMessage(value: unknown): value is WatchSyncMessage {
   if (message.type === 'heartbeat') {
     return (
       isEmbedKind(message.kind) &&
-      typeof message.src === 'string' &&
-      message.src.length > 0 &&
+      isEmbedSource(message.kind, message.src) &&
       typeof message.hostIdentity === 'string' &&
       message.hostIdentity.length > 0 &&
       isFiniteNumber(message.currentTime) &&
@@ -59,7 +59,19 @@ export function isWatchSyncMessage(value: unknown): value is WatchSyncMessage {
 }
 
 function isEmbedKind(value: unknown): value is EmbedKind {
-  return value === 'url' || value === 'youtube';
+  return value === 'url' || value === 'youtube' || value === 'vk';
+}
+
+function isEmbedSource(kind: EmbedKind, value: unknown): value is string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 8192) return false;
+  if (kind === 'youtube') return /^[A-Za-z0-9_-]{6,128}$/.test(value);
+  if (kind === 'vk') return isVkVideoSource(value);
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function isFiniteNumber(value: unknown): value is number {
