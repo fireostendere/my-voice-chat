@@ -123,7 +123,9 @@ export function WatchTogetherProvider({ children }: { children: React.ReactNode 
   const sendSync = React.useCallback(
     (msg: WatchSyncMessage) => {
       try {
-        send(encoder.encode(JSON.stringify(msg)), { reliable: true });
+        void Promise.resolve(send(encoder.encode(JSON.stringify(msg)), { reliable: true })).catch(
+          (err) => console.warn('watch-together sync send failed', err),
+        );
       } catch (err) {
         console.warn('watch-together sync send failed', err);
       }
