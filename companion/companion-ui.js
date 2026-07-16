@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const http = require('node:http');
 const path = require('node:path');
+const { normalizeWebAppUrl } = require('./client-config');
 const { parseTorrentInput } = require('./torrent-core');
 
 const MAX_BODY_BYTES = 3 * 1024 * 1024;
@@ -19,6 +20,10 @@ class CompanionUiServer {
     approveOrigin,
     revokeOrigin,
     originsManaged = false,
+    getWebAppUrl = async () => null,
+    setWebAppUrl,
+    clearWebAppUrl,
+    webAppManaged = false,
     uiDir,
   }) {
     this.port = port;
@@ -30,6 +35,10 @@ class CompanionUiServer {
     this.approveOrigin = approveOrigin;
     this.revokeOrigin = revokeOrigin;
     this.originsManaged = originsManaged;
+    this.getWebAppUrl = getWebAppUrl;
+    this.setWebAppUrl = setWebAppUrl;
+    this.clearWebAppUrl = clearWebAppUrl;
+    this.webAppManaged = webAppManaged;
     this.uiDir = uiDir;
     this.token = crypto.randomBytes(24).toString('base64url');
     this.server = http.createServer((request, response) => {
@@ -96,6 +105,10 @@ class CompanionUiServer {
       this.send(response, 200, image, 'image/png');
       return;
     }
+    if (request.method === 'GET' && url.pathname === '/api/client-config') {
+      this.sendJson(response, 200, { webAppUrl: await this.getWebAppUrl() });
+      return;
+    }
 
     this.requireApiToken(request);
     if (request.method === 'GET' && url.pathname === '/api/status') {
@@ -105,6 +118,8 @@ class CompanionUiServer {
         rooms: this.roomRegistry.listRooms(),
         approvedOrigins: await this.listApprovedOrigins(),
         originsManaged: this.originsManaged,
+        webAppUrl: await this.getWebAppUrl(),
+        webAppManaged: this.webAppManaged,
       });
       return;
     }
@@ -126,14 +141,57 @@ class CompanionUiServer {
       });
       return;
     }
+    if (request.method === 'PUT' && url.pathname === '/api/settings/web-app') {
+      this.requireSameOrigin(request);
+      if (!this.setWebAppUrl || !this.approveOrigin) {
+        throw httpError(501, 'Web app configuration is unavailable.');
+      }
+      if (this.webAppManaged) {
+        throw httpError(409, 'The web app URL is managed by COMPANION_WEB_APP_URL.');
+      }
+      const body = await readJson(request, 4096);
+      const webAppUrl = normalizeWebAppUrl(body.url);
+      if (!webAppUrl) throw httpError(400, 'Enter a valid HTTPS voice-chat address.');
+      await this.approveOrigin(webAppUrl);
+      await this.setWebAppUrl(webAppUrl);
+      this.sendJson(response, 200, {
+        webAppUrl,
+        approvedOrigins: await this.listApprovedOrigins(),
+      });
+      return;
+    }
+    if (request.method === 'DELETE' && url.pathname === '/api/settings/web-app') {
+      this.requireSameOrigin(request);
+      if (!this.clearWebAppUrl) throw httpError(501, 'Web app configuration is unavailable.');
+      if (this.webAppManaged) {
+        throw httpError(409, 'The web app URL is managed by COMPANION_WEB_APP_URL.');
+      }
+      await this.clearWebAppUrl();
+      this.sendJson(response, 200, {
+        webAppUrl: null,
+        approvedOrigins: await this.listApprovedOrigins(),
+      });
+      return;
+    }
     if (request.method === 'DELETE' && url.pathname === '/api/settings/origin') {
       this.requireSameOrigin(request);
       if (!this.revokeOrigin) throw httpError(501, 'Manual server configuration is unavailable.');
       const body = await readJson(request, 4096);
       const origin = await this.revokeOrigin(body.origin);
+      let webAppUrl = await this.getWebAppUrl();
+      if (
+        !this.webAppManaged &&
+        this.clearWebAppUrl &&
+        webAppUrl &&
+        new URL(webAppUrl).origin === origin
+      ) {
+        await this.clearWebAppUrl();
+        webAppUrl = null;
+      }
       this.sendJson(response, 200, {
         origin,
         approvedOrigins: await this.listApprovedOrigins(),
+        webAppUrl,
       });
       return;
     }

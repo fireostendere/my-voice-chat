@@ -42,7 +42,10 @@ beforeEach(() => {
   vi.spyOn(window, 'setInterval').mockImplementation(() => 0);
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  delete window.chrome;
+});
 
 describe('companion talk-key capture', () => {
   it('captures physical keyboard and mouse keys, saves immediately, and lets Esc cancel', async () => {
@@ -89,13 +92,26 @@ describe('companion talk-key capture', () => {
 });
 
 describe('companion trusted server settings', () => {
-  it('adds and removes a voice-chat origin from the local GUI', async () => {
+  it('selects the voice-chat web app, opens it in the native client, and removes it', async () => {
     let approvedOrigins = [];
+    let webAppUrl = null;
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'chrome', {
+      configurable: true,
+      value: { webview: { postMessage } },
+    });
     const fetchMock = vi.fn(async (path, options = {}) => {
+      if (path === '/api/settings/web-app') {
+        const origin = new URL(JSON.parse(options.body).url).origin;
+        approvedOrigins = [origin];
+        webAppUrl = `${origin}/`;
+        return { ok: true, json: async () => ({ webAppUrl, approvedOrigins }) };
+      }
       if (path === '/api/settings/origin') {
         const origin = new URL(JSON.parse(options.body).origin).origin;
         approvedOrigins = options.method === 'DELETE' ? [] : [origin];
-        return { ok: true, json: async () => ({ origin, approvedOrigins }) };
+        if (options.method === 'DELETE') webAppUrl = null;
+        return { ok: true, json: async () => ({ origin, approvedOrigins, webAppUrl }) };
       }
       return {
         ok: true,
@@ -103,6 +119,8 @@ describe('companion trusted server settings', () => {
           rooms: [],
           approvedOrigins,
           originsManaged: false,
+          webAppUrl,
+          webAppManaged: false,
           supportedKeys: ['F8'],
           pttKey: 'F8',
         }),
@@ -119,15 +137,17 @@ describe('companion trusted server settings', () => {
     fireEvent.input(input, { target: { value: 'https://api.iroslyakov.com/rooms/cinema' } });
     fireEvent.submit(form);
     await waitFor(() => expect(list.textContent).toContain('https://api.iroslyakov.com'));
+    expect(list.textContent).toContain('CLIENT');
+    expect(postMessage).toHaveBeenCalledWith('open-client');
     const addRequest = fetchMock.mock.calls.find(
-      ([path, options]) => path === '/api/settings/origin' && options.method === 'POST',
+      ([path, options]) => path === '/api/settings/web-app' && options.method === 'PUT',
     );
     expect(JSON.parse(addRequest[1].body)).toEqual({
-      origin: 'https://api.iroslyakov.com/rooms/cinema',
+      url: 'https://api.iroslyakov.com/rooms/cinema',
     });
 
     fireEvent.click(list.querySelector('button[data-origin-action="remove"]'));
-    await waitFor(() => expect(list.textContent).toContain('No trusted server'));
+    await waitFor(() => expect(list.textContent).toContain('No voice-chat server'));
     expect(fetchMock.mock.calls).toContainEqual([
       '/api/settings/origin',
       expect.objectContaining({ method: 'DELETE' }),

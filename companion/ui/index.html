@@ -46,15 +46,15 @@
           <div class="panel-heading connection-heading">
             <span class="section-index">02</span>
             <div>
-              <span class="eyebrow">TRUSTED VOICE-CHAT SITE</span>
-              <h2>Server connection</h2>
+              <span class="eyebrow">DESKTOP WEB CLIENT</span>
+              <h2>Voice-chat server</h2>
             </div>
             <span class="connection-mode" id="connection-mode">MANUAL</span>
           </div>
 
           <form class="server-form" id="server-form">
             <label class="field" for="server-origin-input">
-              <span>Site address</span>
+              <span>Web app address</span>
               <input
                 id="server-origin-input"
                 type="url"
@@ -66,8 +66,8 @@
               />
             </label>
             <button type="submit" class="primary-action server-save" id="save-origin-button">
-              <span>Trust server</span>
-              <b aria-hidden="true">＋</b>
+              <span>Connect in app</span>
+              <b aria-hidden="true">↗</b>
             </button>
           </form>
 
@@ -75,8 +75,9 @@
             <span class="origin-empty">No trusted server configured yet.</span>
           </div>
           <p class="connection-note">
-            Add the HTTPS address shown in your browser. This replaces the missed approval dialog;
-            the site still connects to Companion locally on this PC.
+            This address opens as the main Companion screen. The selected site is also trusted to
+            use push-to-talk and torrent playback on this PC. Other websites open in your default
+            browser.
           </p>
         </section>
 
@@ -155,7 +156,7 @@
             </div>
             <div>
               <span>BRIDGE</span>
-              <strong>Browser → this PC</strong>
+              <strong>Web client → this PC</strong>
             </div>
           </div>
         </aside>
@@ -211,7 +212,7 @@
       </div>
 
       <footer>
-        <span id="footer-status">Join a room in the browser and allow local access…</span>
+        <span id="footer-status">Open Chat, join a room, and allow local access…</span>
         <button type="button" id="refresh-button">Refresh</button>
       </footer>
     </main>

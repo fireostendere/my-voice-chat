@@ -70,7 +70,7 @@ describe('companion UI server', () => {
     const approvedOrigins = [];
     const approveOrigin = vi.fn(async (origin) => {
       const normalized = new URL(origin).origin;
-      approvedOrigins.push(normalized);
+      if (!approvedOrigins.includes(normalized)) approvedOrigins.push(normalized);
       return normalized;
     });
     const revokeOrigin = vi.fn(async (origin) => {
@@ -82,6 +82,14 @@ describe('companion UI server', () => {
       accepted: true,
       message: 'Playback control applied.',
     });
+    let webAppUrl = null;
+    const setWebAppUrl = vi.fn(async (value) => {
+      webAppUrl = value;
+      return value;
+    });
+    const clearWebAppUrl = vi.fn(async () => {
+      webAppUrl = null;
+    });
     const server = new CompanionUiServer({
       port: 7333,
       getPttKey: () => 'F8',
@@ -91,12 +99,18 @@ describe('companion UI server', () => {
       listApprovedOrigins: async () => approvedOrigins,
       approveOrigin,
       revokeOrigin,
+      getWebAppUrl: async () => webAppUrl,
+      setWebAppUrl,
+      clearWebAppUrl,
       uiDir: path.join(process.cwd(), 'companion', 'ui'),
     });
     const page = await dispatch(server, '/');
     const token = page.body.match(/name="companion-token" content="([^"]+)"/)?.[1];
     expect(page.statusCode).toBe(200);
     expect(token).toBeTruthy();
+
+    const clientConfig = await dispatch(server, '/api/client-config');
+    expect(JSON.parse(clientConfig.body)).toEqual({ webAppUrl: null });
 
     await expect(dispatch(server, '/api/status')).rejects.toThrow('Invalid companion token');
     const status = await dispatch(server, '/api/status', { 'X-Companion-Token': token });
@@ -106,6 +120,8 @@ describe('companion UI server', () => {
       rooms: [],
       approvedOrigins: [],
       originsManaged: false,
+      webAppUrl: null,
+      webAppManaged: false,
     });
 
     await expect(
@@ -133,6 +149,26 @@ describe('companion UI server', () => {
     });
     expect(approveOrigin).toHaveBeenCalledWith('https://api.iroslyakov.com/room/cinema');
 
+    const configured = await dispatch(
+      server,
+      '/api/settings/web-app',
+      {
+        'X-Companion-Token': token,
+        Origin: 'http://127.0.0.1:7333',
+      },
+      JSON.stringify({ url: 'https://api.iroslyakov.com/rooms/cinema?codec=vp9' }),
+      'PUT',
+    );
+    expect(JSON.parse(configured.body)).toEqual({
+      webAppUrl: 'https://api.iroslyakov.com/',
+      approvedOrigins: ['https://api.iroslyakov.com'],
+    });
+    expect(setWebAppUrl).toHaveBeenCalledWith('https://api.iroslyakov.com/');
+    expect(approveOrigin).toHaveBeenLastCalledWith('https://api.iroslyakov.com/');
+    expect(JSON.parse((await dispatch(server, '/api/client-config')).body)).toEqual({
+      webAppUrl: 'https://api.iroslyakov.com/',
+    });
+
     const revoked = await dispatch(
       server,
       '/api/settings/origin',
@@ -146,7 +182,36 @@ describe('companion UI server', () => {
     expect(JSON.parse(revoked.body)).toEqual({
       origin: 'https://api.iroslyakov.com',
       approvedOrigins: [],
+      webAppUrl: null,
     });
+    expect(clearWebAppUrl).toHaveBeenCalledOnce();
+    expect(webAppUrl).toBeNull();
+
+    await dispatch(
+      server,
+      '/api/settings/web-app',
+      {
+        'X-Companion-Token': token,
+        Origin: 'http://127.0.0.1:7333',
+      },
+      JSON.stringify({ url: 'http://localhost:3000/rooms/dev' }),
+      'PUT',
+    );
+    const cleared = await dispatch(
+      server,
+      '/api/settings/web-app',
+      {
+        'X-Companion-Token': token,
+        Origin: 'http://127.0.0.1:7333',
+      },
+      undefined,
+      'DELETE',
+    );
+    expect(JSON.parse(cleared.body)).toEqual({
+      webAppUrl: null,
+      approvedOrigins: ['http://localhost:3000'],
+    });
+    expect(clearWebAppUrl).toHaveBeenCalledTimes(2);
 
     const playback = await dispatch(
       server,
@@ -162,6 +227,45 @@ describe('companion UI server', () => {
       action: 'seek',
       currentTime: 24,
     });
+  });
+
+  it('does not allow the local UI to replace a managed web app URL', async () => {
+    const setWebAppUrl = vi.fn();
+    const clearWebAppUrl = vi.fn();
+    const server = new CompanionUiServer({
+      port: 7333,
+      getPttKey: () => 'F8',
+      setPttKey: vi.fn(),
+      supportedKeys: ['F8'],
+      roomRegistry: { listRooms: () => [] },
+      getWebAppUrl: async () => 'https://managed.example.com/',
+      setWebAppUrl,
+      clearWebAppUrl,
+      webAppManaged: true,
+      approveOrigin: vi.fn(),
+      uiDir: path.join(process.cwd(), 'companion', 'ui'),
+    });
+    const page = await dispatch(server, '/');
+    const token = page.body.match(/name="companion-token" content="([^"]+)"/)?.[1];
+    const headers = {
+      'X-Companion-Token': token,
+      Origin: 'http://127.0.0.1:7333',
+    };
+
+    await expect(
+      dispatch(
+        server,
+        '/api/settings/web-app',
+        headers,
+        JSON.stringify({ url: 'https://other.example.com' }),
+        'PUT',
+      ),
+    ).rejects.toThrow('COMPANION_WEB_APP_URL');
+    await expect(
+      dispatch(server, '/api/settings/web-app', headers, undefined, 'DELETE'),
+    ).rejects.toThrow('COMPANION_WEB_APP_URL');
+    expect(setWebAppUrl).not.toHaveBeenCalled();
+    expect(clearWebAppUrl).not.toHaveBeenCalled();
   });
 });
 

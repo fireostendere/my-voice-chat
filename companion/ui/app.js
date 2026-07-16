@@ -32,6 +32,8 @@ const toast = document.querySelector('#toast');
 let rooms = [];
 let approvedOrigins = [];
 let originsManaged = false;
+let webAppUrl = null;
+let webAppManaged = false;
 let selectedFile = null;
 let toastTimer;
 let keyCaptureFeedbackTimer;
@@ -63,6 +65,8 @@ async function refreshStatus({ quiet = false } = {}) {
     rooms = status.rooms;
     approvedOrigins = status.approvedOrigins || [];
     originsManaged = status.originsManaged === true;
+    webAppUrl = status.webAppUrl || null;
+    webAppManaged = status.webAppManaged === true;
     renderRooms();
     renderOrigins();
     renderKeys(status.supportedKeys, status.pttKey);
@@ -79,8 +83,7 @@ function renderRooms() {
   if (rooms.length === 0) {
     roomSelect.add(new Option('No active rooms', ''));
     roomSelect.disabled = true;
-    footerStatus.textContent =
-      'Join a room in the browser and allow its local-network access prompt.';
+    footerStatus.textContent = 'Open Chat, join a room, and allow its local-network access prompt.';
   } else {
     for (const room of rooms) {
       roomSelect.add(new Option(`${room.roomName} · ${room.participantIdentity}`, room.id));
@@ -104,35 +107,44 @@ function renderKeys(keys, currentKey) {
 
 function renderOrigins() {
   approvedOriginList.replaceChildren();
-  connectionMode.textContent = originsManaged ? 'MANAGED' : 'MANUAL';
-  connectionMode.classList.toggle('managed', originsManaged);
-  serverOriginInput.disabled = originsManaged;
-  saveOriginButton.disabled = originsManaged;
+  const configurationManaged = originsManaged || webAppManaged;
+  connectionMode.textContent = configurationManaged ? 'MANAGED' : 'DESKTOP';
+  connectionMode.classList.toggle('managed', configurationManaged);
+  serverOriginInput.disabled = configurationManaged;
+  saveOriginButton.disabled = configurationManaged;
 
   if (approvedOrigins.length === 0) {
     const empty = document.createElement('span');
     empty.className = 'origin-empty';
     empty.textContent = originsManaged
-      ? 'COMPANION_ORIGINS does not contain any valid sites.'
-      : 'No trusted server configured yet.';
+      ? 'The managed configuration does not contain a valid web app.'
+      : 'No voice-chat server configured yet.';
     approvedOriginList.append(empty);
     return;
   }
 
   for (const origin of approvedOrigins) {
+    const selected = webAppUrl && new URL(webAppUrl).origin === origin;
     const row = document.createElement('div');
     row.className = 'origin-row';
+    row.classList.toggle('selected', Boolean(selected));
 
     const indicator = document.createElement('i');
     indicator.setAttribute('aria-hidden', 'true');
     const label = document.createElement('strong');
     label.textContent = origin;
     label.title = origin;
+    if (selected) {
+      const badge = document.createElement('span');
+      badge.className = 'client-badge';
+      badge.textContent = 'CLIENT';
+      label.append(badge);
+    }
     const openButton = document.createElement('button');
     openButton.type = 'button';
-    openButton.dataset.originAction = 'open';
+    openButton.dataset.originAction = selected ? 'open' : 'use';
     openButton.dataset.origin = origin;
-    openButton.textContent = 'OPEN SITE';
+    openButton.textContent = selected ? 'OPEN CHAT' : 'USE IN APP';
     row.append(indicator, label, openButton);
 
     if (!originsManaged) {
@@ -147,26 +159,54 @@ function renderOrigins() {
   }
 }
 
-async function saveOrigin() {
-  const origin = serverOriginInput.value.trim();
-  if (!origin || originsManaged) return;
+async function saveWebApp() {
+  const url = serverOriginInput.value.trim();
+  if (!url || originsManaged || webAppManaged) return;
   saveOriginButton.disabled = true;
-  saveOriginButton.querySelector('span').textContent = 'Saving…';
+  saveOriginButton.querySelector('span').textContent = 'Connecting…';
   try {
-    const result = await api('/api/settings/origin', {
-      method: 'POST',
-      body: JSON.stringify({ origin }),
+    const result = await api('/api/settings/web-app', {
+      method: 'PUT',
+      body: JSON.stringify({ url }),
     });
     approvedOrigins = result.approvedOrigins;
+    webAppUrl = result.webAppUrl;
     serverOriginInput.value = '';
     renderOrigins();
-    showToast(`${result.origin} is now trusted. Open a room there to connect it.`);
+    showToast(`${new URL(result.webAppUrl).origin} is now the Companion client.`);
+    openWebApp();
   } catch (error) {
     showToast(error.message, true);
   } finally {
-    saveOriginButton.querySelector('span').textContent = 'Trust server';
-    saveOriginButton.disabled = originsManaged;
+    saveOriginButton.querySelector('span').textContent = 'Connect in app';
+    saveOriginButton.disabled = originsManaged || webAppManaged;
   }
+}
+
+async function selectWebApp(url) {
+  if (webAppManaged) return;
+  try {
+    const result = await api('/api/settings/web-app', {
+      method: 'PUT',
+      body: JSON.stringify({ url }),
+    });
+    approvedOrigins = result.approvedOrigins;
+    webAppUrl = result.webAppUrl;
+    renderOrigins();
+    showToast(`${new URL(result.webAppUrl).origin} is now the Companion client.`);
+    openWebApp();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function openWebApp() {
+  if (!webAppUrl) return;
+  if (window.chrome?.webview?.postMessage) {
+    window.chrome.webview.postMessage('open-client');
+    return;
+  }
+  window.open(webAppUrl, '_blank', 'noopener,noreferrer');
 }
 
 async function removeOrigin(origin) {
@@ -177,6 +217,7 @@ async function removeOrigin(origin) {
       body: JSON.stringify({ origin }),
     });
     approvedOrigins = result.approvedOrigins;
+    webAppUrl = result.webAppUrl || null;
     renderOrigins();
     showToast(`${result.origin} was removed from trusted servers.`);
   } catch (error) {
@@ -192,7 +233,7 @@ function renderPlayback() {
     playbackTitle.textContent = 'Nothing is playing';
     playbackDetail.textContent = rooms.length
       ? 'Choose a torrent above and send it to this room.'
-      : 'Join a room in the browser and allow access to this PC when prompted.';
+      : 'Open Chat, join a room, and allow access to this PC when prompted.';
     if (!seeking) playbackSeek.value = '0';
     playbackSeek.disabled = true;
     playbackCurrent.textContent = '0:00';
@@ -527,14 +568,16 @@ roomSelect.addEventListener('change', () => {
 });
 serverForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  void saveOrigin();
+  void saveWebApp();
 });
 approvedOriginList.addEventListener('click', (event) => {
   const button = event.target.closest('button[data-origin-action]');
   if (!button) return;
   const origin = button.dataset.origin;
   if (button.dataset.originAction === 'open') {
-    window.open(origin, '_blank', 'noopener,noreferrer');
+    openWebApp();
+  } else if (button.dataset.originAction === 'use') {
+    void selectWebApp(origin);
   } else if (button.dataset.originAction === 'remove') {
     void removeOrigin(origin);
   }

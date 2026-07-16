@@ -10,6 +10,8 @@
  * Config (environment variables):
  *   PTT_PORT     WebSocket port (default 7331)
  *   PTT_KEY      Key name to use as the talk button (default "F8")
+ *   COMPANION_WEB_APP_URL
+ *                Managed HTTPS URL opened by the desktop client.
  *   COMPANION_ORIGINS / PTT_ORIGINS
  *                Comma-separated list of allowed browser origins, e.g.
  *                "https://chat.example.com". Without an explicit list, Windows
@@ -25,6 +27,7 @@ const util = require('node:util');
 installFileLogger(process.env.COMPANION_LOG_FILE);
 
 const { WebSocketServer } = require('ws');
+const { createFileClientConfig, normalizeWebAppUrl } = require('./client-config');
 const { CompanionUiServer } = require('./companion-ui');
 const { companionDataDir, createFileOriginApprover } = require('./origin-approval');
 const { PttKeyListener, SUPPORTED_KEYS, normalizePttKey } = require('./ptt-key-listener');
@@ -39,16 +42,22 @@ const PORT = Number(process.env.PTT_PORT) || 7331;
 let pttKey = loadPttKey();
 const TORRENT_PORT = Number(process.env.TORRENT_PORT) || PORT + 1;
 const UI_PORT = Number(process.env.COMPANION_UI_PORT) || PORT + 2;
+const MANAGED_WEB_APP_URL = normalizeWebAppUrl(process.env.COMPANION_WEB_APP_URL);
 const ALLOWED_ORIGINS = (process.env.COMPANION_ORIGINS || process.env.PTT_ORIGINS || '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
+if (MANAGED_WEB_APP_URL) ALLOWED_ORIGINS.push(new URL(MANAGED_WEB_APP_URL).origin);
 const UI_URL = `http://127.0.0.1:${UI_PORT}/`;
 const PACKAGED_ICON_PATH = path.join(__dirname, 'ui', 'livekit.ico');
 const ICON_PATH = fs.existsSync(PACKAGED_ICON_PATH)
   ? PACKAGED_ICON_PATH
   : path.join(__dirname, 'assets', 'livekit-companion.ico');
 
+const clientConfig = createFileClientConfig({
+  configuredUrl: process.env.COMPANION_WEB_APP_URL,
+  dataDir: DATA_DIR,
+});
 claimProcess();
 const originApprover = createFileOriginApprover({ configuredOrigins: ALLOWED_ORIGINS });
 
@@ -139,6 +148,10 @@ const uiServer = new CompanionUiServer({
   approveOrigin: (value) => originApprover.allow(value),
   revokeOrigin: (value) => originApprover.revoke(value),
   originsManaged: originApprover.managed,
+  getWebAppUrl: () => clientConfig.getWebAppUrl(),
+  setWebAppUrl: (value) => clientConfig.setWebAppUrl(value),
+  clearWebAppUrl: () => clientConfig.clearWebAppUrl(),
+  webAppManaged: clientConfig.managed,
   uiDir: path.join(__dirname, 'ui'),
 });
 uiServer.start().catch((error) => {
