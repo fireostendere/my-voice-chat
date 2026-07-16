@@ -8,8 +8,9 @@ A video-conferencing web app — a customized fork of [LiveKit Meet](https://git
 It is a **Next.js 15 App Router** front end on top of the LiveKit realtime SDKs
 (`livekit-client`, `@livekit/components-react`) with a thin set of Next.js Route
 Handlers that mint access tokens and drive room recording (Egress). There is no
-database and no custom backend service — all realtime media is handled by a
-LiveKit server (LiveKit Cloud or self-hosted).
+database or custom deployed media backend — all realtime media is handled by a
+LiveKit server (LiveKit Cloud or self-hosted). The optional Windows Companion combines
+the same web client in WinForms/WebView2 with loopback PTT and BitTorrent services.
 
 See `ARCHITECTURE.md` for the full picture.
 
@@ -36,6 +37,16 @@ Unit tests (vitest) live next to the code as `*.test.ts(x)` files in `lib/`, plu
 CI (`.github/workflows/test.yaml`) runs, in order: `pnpm lint`, `pnpm format:check`,
 `pnpm test`. All three must pass.
 
+Companion JavaScript tests are included in the root Vitest run. Native compile checks:
+
+```bash
+dotnet build companion/app-launcher/LiveKitCompanion.csproj -c Release -r win-x64
+dotnet build companion/ptt-helper/PttKeyState.csproj -c Release -r win-x64
+```
+
+The Windows release workflow performs the final Native AOT publish, installs the EXE,
+and smoke-tests the real WebView2 client and uninstaller.
+
 ## Setup
 
 1. `pnpm install`
@@ -58,6 +69,7 @@ Two ways to join a room, each with its own entry route and client component:
 - Server route handlers (`app/api/**`) are the only server code:
   - `connection-details` → issues a short-lived (`5m`) participant JWT.
   - `record/start` + `record/stop` → control LiveKit Egress (S3 output).
+  - `companion/download` → redirects to the rolling Windows installer or HTTPS mirror.
 - `lib/` holds the reusable pieces: token-region helper, E2EE setup, the low-CPU
   performance optimizer, and the in-room UI add-ons (settings menu, camera/mic
   settings, debug overlay, recording indicator, keyboard shortcuts, synchronized
@@ -99,6 +111,13 @@ Public (`NEXT_PUBLIC_*`, shipped to the browser):
 | `NEXT_PUBLIC_COMPANION_WS_URL`                                  | `ws://127.0.0.1:7331`     | Local companion endpoint for torrent cinema and, unless overridden, PTT.                                         |
 | `NEXT_PUBLIC_PTT_WS_URL`                                        | companion URL             | Override the PTT endpoint. Set empty to disable only global push-to-talk.                                        |
 
+Companion packaging/runtime (not Next.js `.env.local`):
+
+| Var                     | Where it is set                    | Purpose                                                                                    |
+| ----------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
+| `COMPANION_WEB_APP_URL` | GitHub repository variable/runtime | Managed HTTPS web-app origin embedded by the release workflow; runtime env takes priority. |
+| `COMPANION_ORIGINS`     | Desktop process environment        | Authoritative PTT/torrent origin allowlist; disables interactive origin mutation.          |
+
 ## Per-room URL parameters
 
 Room behavior is tuned through query/hash parameters rather than settings:
@@ -133,5 +152,16 @@ Room behavior is tuned through query/hash parameters rather than settings:
 - **COOP/COEP headers** are set globally in `next.config.js` (required for the E2EE
   WebWorker / SharedArrayBuffer). Cross-origin assets must be `credentialless`-compatible.
   Cross-origin **iframes** are blocked under COEP unless they load `credentialless` —
-  the watch-together YouTube player creates its iframe manually with that attribute
-  (Chromium-only; Firefox does not support credentialless iframes).
+  the watch-together YouTube and VK Video players create their iframes manually with
+  that attribute (Chromium-only; Firefox does not support credentialless iframes).
+- **Never iframe a pasted VK URL.** Parse only exact `vk.com`, `vk.ru`, or
+  `vkvideo.ru` hosts, serialize the validated owner/video/access-key tuple, and rebuild
+  the canonical `https://vk.ru/video_ext.php` URL. Player messages must pass exact
+  iframe-window, origin, and payload-schema checks.
+- **The desktop marker is an object, not a boolean:**
+  `window.__LIVEKIT_COMPANION__ = { host: 'webview2', platform: 'windows', version: 1 }`.
+  Keep it frozen/versioned. WebView2 may navigate only the configured app origin and
+  localhost Settings; permissions and screen capture belong only to the app origin.
+- **`GET /api/client-config` is deliberately tokenless but loopback-only.** Settings
+  mutations remain protected by the in-memory token plus exact localhost same-origin
+  validation. Do not expose that Settings server beyond `127.0.0.1`.

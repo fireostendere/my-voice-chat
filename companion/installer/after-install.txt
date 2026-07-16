@@ -1,11 +1,16 @@
 LiveKit Companion is ready to use as a regular Windows application.
 
-Open LiveKit Companion from the desktop or Start menu. Its control panel starts the
-background service automatically, lets you capture the global push-to-talk key, sends
-magnet links or .torrent files to an active room, and controls playback there.
+Open LiveKit Companion from the desktop or Start menu. It starts the background service
+automatically and opens the voice-chat client in its own window. Use the native Settings
+button to capture the global push-to-talk key, send magnet links or .torrent files to an
+active room, and control playback there.
+
+If the Chat page is not configured or cannot load, open Settings > Voice-chat server,
+enter the HTTPS address of your deployed web app, and choose Connect in app. HTTP is
+accepted only for local loopback development.
 
 No batch files, command prompts, or manual configuration are required. The companion
 keeps running in the background and places the LiveKit icon in the system tray.
-Double-click that icon to reopen the control panel, or right-click it to open or exit.
+Double-click that icon to reopen the client, or right-click it to open or exit.
 
 You can also uninstall it from Windows Settings > Apps > Installed apps > LiveKit Companion.

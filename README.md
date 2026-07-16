@@ -44,7 +44,9 @@ customized fork of [LiveKit Meet](https://github.com/livekit/meet).
 - ⌨️ **Keyboard shortcuts** and a **debug overlay** (`Shift+D`).
 - 📊 Optional **Datadog** log forwarding.
 - 🍿 **Synchronized room cinema** for direct MP4/WebM/Ogg URLs, HLS streams,
-  YouTube links, local files, and host-side torrents shared over LiveKit.
+  YouTube and VK Video links, local files, and host-side torrents shared over LiveKit.
+- 🖥️ **Windows Companion desktop client** built with WinForms and WebView2, with
+  global push-to-talk, regular BitTorrent peers, and the complete web app in one window.
 
 ## Tech stack
 
@@ -158,7 +160,11 @@ CI runs `lint`, `format:check`, and `test` on every push and pull request.
 | `NEXT_PUBLIC_PTT_WS_URL`                                       | Push-to-talk companion URL (default `ws://127.0.0.1:7331`; empty disables it).            |
 
 The companion download endpoint accepts the server-only `COMPANION_EXE_URL` override
-for a custom HTTPS mirror of `LiveKitCompanionSetup.exe`.
+for a custom HTTPS mirror of `LiveKitCompanionSetup.exe`. The Windows release workflow
+reads the repository variable `COMPANION_WEB_APP_URL` and embeds that HTTPS origin as
+the desktop client's managed home page; it falls back to `https://api.iroslyakov.com/`.
+A runtime environment variable with the same name overrides the packaged value. It is
+not read from the Next.js `.env.local` file.
 
 ## Configuring a room via URL
 
@@ -191,10 +197,11 @@ recorded.
 Use the **Кинотеатр** pill in the upper-left corner of a connected room. The current
 host can choose one of three source modes:
 
-- **Link or YouTube** synchronizes play, pause, seeking, and playback position over a
-  reliable LiveKit data channel. Direct MP4/WebM/Ogg URLs use the browser player;
-  HLS (`.m3u8`) uses `hls.js`; YouTube watch, shorts, live, and embed URLs use the
-  YouTube IFrame API.
+- **Link, YouTube, or VK Video** synchronizes play, pause, seeking, and playback
+  position over a reliable LiveKit data channel. Direct MP4/WebM/Ogg URLs use the
+  browser player; HLS (`.m3u8`) uses `hls.js`; YouTube uses the IFrame API. VK accepts
+  regular video and clip pages from `vk.ru`, `vk.com`, and `vkvideo.ru`, feed-layer
+  links using `?z=`, and exported `video_ext.php` links with an access key.
 - **Local file** stays on the host's device. The browser captures the local player and
   publishes its video and audio as LiveKit screen-share tracks, so there is no upload
   or file-size limit in the Next.js app.
@@ -208,12 +215,20 @@ Only the current host can replace or stop an active linked source. If the host l
 viewers release the stale player after the heartbeat timeout. Viewers may need to click
 the playback overlay once because browsers block unmuted autoplay.
 
+Pasted VK URLs are never embedded verbatim. The client sends only a validated
+`ownerId_videoId[_accessKey]` identity and rebuilds the official
+`https://vk.ru/video_ext.php` URL; player events must match the exact iframe window,
+origin, and expected message schema.
+
 Direct sources must be playable by the browser, and HLS origins must allow cross-origin
-fetches. YouTube playback is most reliable in Chromium: this app's global COEP header
-requires a `credentialless` iframe, which Firefox does not currently support.
+fetches. YouTube and VK Video are most reliable in Chromium: this app's global COEP
+header requires a `credentialless` iframe, which Firefox does not currently support.
+A private VK video still requires a valid exported access key and permission to embed.
 Browser WebTorrent can only reach WebRTC-capable peers and web seeds. Install and run
 the companion when ordinary public magnet links must work. Torrent playback still
 depends on the browser being able to decode the selected (largest) video file.
+
+## Windows companion client
 
 The home page and the room's always-visible top toolbar provide a **Download companion** button. It
 redirects to a Windows EXE installer from the rolling `companion-latest` GitHub
@@ -226,22 +241,34 @@ The packaged PTT helper is built from this repository and checks only the config
 virtual key. It replaces the previous third-party global keyboard hook; it does not
 capture typed text or observe unrelated keys.
 
-The **LiveKit Companion** shortcut starts the background service and opens its own
-local control window with the LiveKit taskbar icon. It manages trusted voice-chat site
-origins, lists active rooms, accepts magnet links and `.torrent` files, and changes the
-global PTT key. The LiveKit tray icon reopens the window or exits the service. Use
-**Status and diagnostics** for the PID and startup log, and remove it with **Uninstall
-LiveKit Companion** or **Windows Settings → Apps → Installed apps**.
+The **LiveKit Companion** shortcut starts the bundled background service and opens the
+complete voice-chat web app in a WinForms/WebView2 window. Its native toolbar provides
+**Back**, **Home / Chat**, **Settings**, and **Reload**. Only the configured web-app
+origin and the loopback Settings origin can navigate inside the window; other links
+open in the system browser. Camera, microphone, and screen-capture permissions are
+available only to the configured app origin. The injected
+`window.__LIVEKIT_COMPANION__` marker lets the web UI hide its installer link.
 
-On the first connection from a remote voice-chat origin, Chrome or Edge may first ask
-for local-network access. The companion then asks the user to approve that site in a
-Windows dialog. The decision is stored locally and gates both PTT and torrent commands.
-If that dialog does not appear, enter the full deployed site URL in the control panel's
-**Server connection** section and choose **Trust server**. Saved origins can also be
-opened or removed there.
-`127.0.0.1:7331` means the user's own PC, not the deployed web server. Managed manual
-installations can still set an exact `COMPANION_ORIGINS` allowlist to disable the
-companion's interactive approval.
+Release builds open the managed origin embedded from `COMPANION_WEB_APP_URL`. In an
+unmanaged development installation, use **Settings → Voice-chat server → Connect in
+app**; the normalized HTTPS origin is saved locally and approved for both PTT and
+torrent commands. HTTP is accepted only for loopback development. This value is the
+Next.js web-app URL, not the LiveKit WebSocket URL or an API credential. If the client
+URL is absent or fails to load, the native window falls back to localhost Settings.
+
+On the first connection from the embedded client or a regular Chrome/Edge browser,
+Windows may ask for local-network access before the companion shows its own origin
+approval dialog. The selected app origin is trusted automatically; other decisions are
+stored per user. `127.0.0.1:7331` always means the user's own PC, not the deployed
+server. An exact `COMPANION_ORIGINS` allowlist remains authoritative for managed
+installations and disables interactive origin changes.
+
+The LiveKit tray icon reopens the client or exits the service. Autostart launches the
+service and tray without forcing the client window to the foreground. Remove the app
+with **Uninstall LiveKit Companion** or **Windows Settings → Apps → Installed apps**.
+The Windows release job installs the final EXE and smoke-tests WebView2, camera and
+microphone access, WebRTC, `captureStream()`, the native marker, companion capabilities,
+startup, and uninstallation before publishing an installer.
 
 ## Deployment
 

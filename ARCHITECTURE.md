@@ -11,12 +11,12 @@ The app is a **Next.js 15 (App Router)** front end. It does not own any media
 infrastructure — all audio/video routing is done by a **LiveKit server** (LiveKit
 Cloud or self-hosted). The Next.js server side is intentionally tiny: four Route
 Handlers that mint a participant access token, start/stop recording, and redirect to
-the companion installer. Everything else is a browser client that talks WebRTC directly
-to LiveKit.
+the companion installer. Everything else is the same web client running in a regular
+browser or the Windows Companion's WebView2 and talking WebRTC directly to LiveKit.
 
 ```
                           ┌──────────────────────────────────────────┐
-                          │                Browser                    │
+                          │       Browser or Companion WebView2       │
                           │                                           │
   app/page.tsx  ────────► │  PageClientImpl / VideoConferenceClient   │
   (tabbed launcher)       │     • livekit-client Room                 │
@@ -64,7 +64,7 @@ to LiveKit.
 | `usePerfomanceOptimiser.ts` | `useLowCPUOptimizer` — listens for `LocalTrackCpuConstrained` and degrades publisher/subscriber video quality.                                                             |
 | `SettingsMenu.tsx`          | In-room settings drawer (Media / Recording tabs). Gated by `NEXT_PUBLIC_SHOW_SETTINGS_MENU`.                                                                               |
 | `CustomVideoConference.tsx` | Conference layout with participant volume controls, custom chat, and the watch-together cinema stage.                                                                      |
-| `watchTogether/**`          | Cinema source picker, synchronized URL/HLS/YouTube players, and host-side local-file/torrent publication through LiveKit screen-share tracks.                              |
+| `watchTogether/**`          | Cinema source picker, synchronized URL/HLS/YouTube/VK players, and host-side local-file/torrent publication through LiveKit screen-share tracks.                           |
 | `CameraSettings.tsx`        | Camera device + background effects (blur / virtual background via `@livekit/track-processors`).                                                                            |
 | `MicrophoneSettings.tsx`    | Mic device + Krisp enhanced noise cancellation (auto-on for non-low-power devices).                                                                                        |
 | `RecordingIndicator.tsx`    | Red inset border + toast while the room is being recorded.                                                                                                                 |
@@ -161,19 +161,26 @@ noise-filter quality and whether it auto-enables.
 ## Watch-together cinema
 
 `CustomVideoConference` always mounts `WatchTogetherProvider` and a visible
-`CinemaPanel`. A participant can start a direct media URL, a YouTube URL, a local
-video file, or a torrent. Starting linked media moves the conference into focus layout
-with the player as the main stage and participant tracks in the carousel.
+`CinemaPanel`. A participant can start a direct media URL, a YouTube URL, a VK Video
+URL, a local video file, or a torrent. Starting linked media moves the conference into
+focus layout with the player as the main stage and participant tracks in the carousel.
 
 ### Linked media synchronization
 
 - `parseVideoUrl` normalizes URLs and extracts video IDs from YouTube watch, short,
-  embed, live, `youtu.be`, and privacy-enhanced embed links.
+  embed, live, `youtu.be`, and privacy-enhanced embed links. VK parsing accepts exact
+  `vk.com`, `vk.ru`, and `vkvideo.ru` hosts, normal video/clip paths, layer links using
+  `?z=`, and exported `video_ext.php` links. Only the normalized owner/video/access-key
+  tuple is sent over LiveKit; the original URL is never embedded.
 - Progressive sources use the native `<video>` element. HLS playlists use native HLS
   where available and `hls.js` elsewhere, with recovery for fatal network and media
   errors.
 - YouTube uses the IFrame API. The iframe is created manually with `credentialless`
   because the app is cross-origin isolated for E2EE.
+- VK uses the documented [VK Video widget API](https://dev.vk.com/ru/widgets/video)
+  (`video_ext.php?js_api=1`) through a local, schema-validating adapter. It rebuilds an
+  HTTPS `vk.ru` embed URL and requires both the expected iframe window and exact VK
+  origin for every incoming player event.
 - The host sends `start-embed`, `play`, `pause`, `seek`, and a 2.5-second heartbeat on
   the reliable `watch-together` LiveKit data topic. Viewers re-seek only after drift
   exceeds 600 ms.
@@ -182,7 +189,7 @@ with the player as the main stage and participant tracks in the carousel.
   linked source.
 - Heartbeats let late joiners discover the active source. Three missed heartbeats plus
   slack clear the player after an ungraceful host disconnect.
-- Browsers commonly reject unmuted autoplay. Both players expose a synchronized
+- Browsers commonly reject unmuted autoplay. All linked players expose a synchronized
   click-to-play fallback for affected viewers.
 
 ### Local files
@@ -230,15 +237,38 @@ a self-contained WinForms application with WebView2; the small internal helper u
 .NET Native AOT. A generated multi-resolution LiveKit ICO is embedded in both binaries
 and the installer.
 
-The companion also serves a token-protected control UI on `127.0.0.1:7333`. It accepts
+The companion also serves a token-protected settings UI on `127.0.0.1:7333`. It accepts
 magnet links and `.torrent` files for active rooms, exposes remote playback controls,
-captures and immediately persists the PTT key, and lets the user add or remove approved
-voice-chat origins. Desktop, Start-menu, post-install, and autostart entries all target
+captures and immediately persists the PTT key, and manages approved voice-chat origins.
+The read-only `GET /api/client-config` endpoint is intentionally public only on this
+loopback server so the native launcher can discover its destination; every mutation
+still requires the in-memory UI token and exact localhost `Origin`.
+Desktop, Start-menu, post-install, and autostart entries all target
 `LiveKitCompanion.exe`; the launcher starts the bundled Node process directly and hosts
-the localhost UI in its own WebView2 window, so the taskbar owner and icon are the
-Companion rather than the default browser. No CMD or VBS launcher is installed. The
-installer bootstraps the official WebView2 Runtime only when it is absent. The internal
-helper owns the LiveKit tray icon and can request an orderly Node shutdown.
+the configured voice-chat web app in its own WebView2 window. A small native toolbar
+switches between Chat and the localhost Settings page while keeping all other origins
+in the system browser. The taskbar owner and icon are therefore the Companion rather
+than the default browser. No CMD or VBS launcher is installed. The installer bootstraps
+the official WebView2 Runtime only when it is absent. The internal helper owns the
+LiveKit tray icon and can request an orderly Node shutdown.
+
+Remote client addresses must use HTTPS; HTTP is accepted only for loopback development.
+If no client URL is configured, or the configured page cannot load, the launcher falls
+back to localhost Settings. WebView2 top-level navigation is restricted to the exact
+configured app origin and the Settings origin. Media permissions and screen capture are
+denied outside the app origin. A frozen versioned marker,
+`window.__LIVEKIT_COMPANION__ = { host: 'webview2', platform: 'windows', version: 1 }`,
+lets the web UI hide its installer link without granting the remote page access to the
+localhost Settings token.
+
+The release workflow embeds `vars.COMPANION_WEB_APP_URL` as the managed client address,
+falling back to `https://api.iroslyakov.com/`. A runtime `COMPANION_WEB_APP_URL` takes
+precedence for managed installations and CI. The Windows smoke test installs the final
+EXE, starts a cross-origin-isolated loopback fixture, and opens that fixture in the real
+WebView2 control with fake camera and microphone devices. Success requires secure
+context and cross-origin isolation, `getUserMedia`, WebRTC, media `captureStream()`, the
+native host marker, and a `ptt` + `torrent` capability handshake with the bundled Node
+service.
 
 The PTT helper polls only the configured Windows virtual key. It replaces the previous
 third-party global keyboard hook and does not enumerate other keys or collect typed
@@ -246,20 +276,20 @@ characters. The Node process converts only `DOWN`/`UP` transitions into PTT WebS
 messages. The same helper displays the Windows origin-approval dialog without invoking
 PowerShell or evaluating a generated script. Startup failures produce a visible native
 dialog with the diagnostic-log path. The release workflow smoke-tests the native EXE
-entry point, background startup, control UI, PID creation, and uninstallation on Windows
-before publishing the installer.
+entry point, background startup, settings UI, full WebView2 client, PID creation, and
+uninstallation on Windows before publishing the installer.
 
-On first contact from a remote browser origin, the companion displays a native Windows
-approval dialog. Approved origins are persisted per user and receive both PTT and
-torrent capabilities. The same persisted allowlist can be managed explicitly from the
-local control UI when the browser dialog is missed or blocked. An explicit
+The selected or managed web-app origin is trusted automatically. Other remote browser
+origins require one-time approval in a native Windows dialog; approved origins are
+persisted per user and receive both PTT and torrent capabilities. The same persisted
+allowlist can be managed explicitly from localhost Settings. An explicit
 `COMPANION_ORIGINS` environment allowlist remains authoritative for managed
-installations and disables UI mutation.
+installations and disables origin mutation.
 
 This requires a browser with `HTMLMediaElement.captureStream()` and a file codec that
 the browser can decode. Direct/HLS sources must also satisfy the remote origin's CORS
-and media-access policy. YouTube mode is effectively Chromium-only while Firefox lacks
-credentialless iframe support under COEP.
+and media-access policy. YouTube and VK modes are effectively Chromium-only while
+Firefox lacks credentialless iframe support under COEP.
 
 ## Build & tooling
 
