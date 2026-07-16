@@ -1,4 +1,13 @@
+'use client';
+
+import React, { useEffect, useState } from 'react';
 import styles from '../styles/CompanionDownloadLink.module.css';
+
+declare global {
+  interface Window {
+    __LIVEKIT_COMPANION__?: true | { host: 'webview2'; platform: 'windows'; version: number };
+  }
+}
 
 export function CompanionDownloadLink({
   compact = false,
@@ -7,6 +16,19 @@ export function CompanionDownloadLink({
   compact?: boolean;
   className?: string;
 }) {
+  const [runningInCompanion, setRunningInCompanion] = useState(false);
+
+  useEffect(() => {
+    const nativeHost = window.__LIVEKIT_COMPANION__;
+    setRunningInCompanion(
+      nativeHost === true ||
+        nativeHost?.host === 'webview2' ||
+        navigator.userAgent.includes('LiveKitCompanion/'),
+    );
+  }, []);
+
+  if (runningInCompanion) return null;
+
   return (
     <a
       className={[styles.link, compact ? styles.compact : '', className ?? '']

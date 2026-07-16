@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Drawing;
+using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -10,6 +12,7 @@ internal static class Program
 {
     private const uint ErrorMessage = 0x00000010 | 0x00010000;
     private const uint WindowClose = 0x0010;
+    private const string WebAppEnvironmentVariable = "COMPANION_WEB_APP_URL";
     private static readonly string UiUrl = $"http://127.0.0.1:{ResolveUiPort()}/";
     private static readonly string InstallDirectory = AppContext.BaseDirectory;
     private static readonly string DataDirectory = Path.Combine(
@@ -18,6 +21,7 @@ internal static class Program
     private static readonly string PidFile = Path.Combine(DataDirectory, "companion.pid");
     private static readonly string StopFile = Path.Combine(DataDirectory, "stop-requested");
     private static readonly string LogFile = Path.Combine(DataDirectory, "companion.log");
+    private static readonly string? PackagedWebAppUrl = ReadAssemblyMetadata("CompanionWebAppUrl");
     private static readonly HttpClient Http = new(
         new HttpClientHandler { UseProxy = false })
     {
@@ -107,6 +111,11 @@ internal static class Program
         startInfo.ArgumentList.Add(entryPoint);
         startInfo.Environment["COMPANION_LOG_FILE"] = LogFile;
         startInfo.Environment["COMPANION_PACKAGED"] = "1";
+        if (Environment.GetEnvironmentVariable(WebAppEnvironmentVariable) is null &&
+            !string.IsNullOrWhiteSpace(PackagedWebAppUrl))
+        {
+            startInfo.Environment[WebAppEnvironmentVariable] = PackagedWebAppUrl;
+        }
         Process.Start(startInfo)?.Dispose();
     }
 
@@ -153,7 +162,7 @@ internal static class Program
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            using var window = new ControlPanelWindow(UiUrl, DataDirectory, smokeTest);
+            using var window = new CompanionWindow(UiUrl, DataDirectory, smokeTest);
             Application.Run(window);
             if (!window.InitializationFailed) return 0;
             ReportStartupError(window.FailureReason ?? "The control window could not start.", false);
@@ -317,6 +326,14 @@ internal static class Program
         }
     }
 
+    private static string? ReadAssemblyMetadata(string key)
+    {
+        return Assembly.GetExecutingAssembly()
+            .GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(attribute => string.Equals(attribute.Key, key, StringComparison.Ordinal))
+            ?.Value;
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int MessageBoxW(nint owner, string text, string caption, uint type);
 
@@ -333,27 +350,48 @@ internal static class Program
     private static extern bool PostMessageW(nint window, uint message, nuint word, nint parameter);
 }
 
-internal sealed class ControlPanelWindow : Form
+internal sealed class CompanionWindow : Form
 {
+    private const string SmokeExpectedTitleVariable = "COMPANION_SMOKE_EXPECTED_TITLE";
+    private const string FakeMediaArguments =
+        "--use-fake-ui-for-media-stream --use-fake-device-for-media-stream";
+
     private readonly Uri uiUri;
+    private readonly Uri clientConfigUri;
     private readonly bool smokeTest;
+    private readonly string? smokeExpectedTitle;
     private readonly WebView2 browser;
+    private readonly ToolStripButton backButton = CreateToolbarButton("Back");
+    private readonly ToolStripButton homeButton = CreateToolbarButton("Home / Chat");
+    private readonly ToolStripButton settingsButton = CreateToolbarButton("Settings");
+    private readonly ToolStripButton reloadButton = CreateToolbarButton("Reload");
     private readonly HttpClient healthClient = new(
         new HttpClientHandler { UseProxy = false })
     {
         Timeout = TimeSpan.FromMilliseconds(750),
     };
+    private readonly HttpClient configClient = new(
+        new HttpClientHandler { UseProxy = false })
+    {
+        Timeout = TimeSpan.FromSeconds(3),
+    };
     private readonly System.Windows.Forms.Timer healthTimer = new() { Interval = 1500 };
+    private Uri? webAppUri;
     private bool checkingHealth;
+    private bool openingClient;
     private int failedHealthChecks;
 
     internal bool InitializationFailed { get; private set; }
     internal string? FailureReason { get; private set; }
 
-    internal ControlPanelWindow(string uiUrl, string dataDirectory, bool smokeTest)
+    internal CompanionWindow(string uiUrl, string dataDirectory, bool smokeTest)
     {
         uiUri = new Uri(uiUrl);
+        clientConfigUri = new Uri(uiUri, "api/client-config");
         this.smokeTest = smokeTest;
+        smokeExpectedTitle = smokeTest
+            ? NullIfWhiteSpace(Environment.GetEnvironmentVariable(SmokeExpectedTitleVariable))
+            : null;
         Text = "LiveKit Companion";
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(1180, 820);
@@ -365,16 +403,51 @@ internal sealed class ControlPanelWindow : Form
             Icon = System.Drawing.Icon.ExtractAssociatedIcon(executable);
         }
 
+        var creationProperties = new CoreWebView2CreationProperties
+        {
+            UserDataFolder = Path.Combine(dataDirectory, "WebView2"),
+        };
+        if (smokeTest) creationProperties.AdditionalBrowserArguments = FakeMediaArguments;
         browser = new WebView2
         {
             Dock = DockStyle.Fill,
             DefaultBackgroundColor = BackColor,
-            CreationProperties = new CoreWebView2CreationProperties
-            {
-                UserDataFolder = Path.Combine(dataDirectory, "WebView2"),
-            },
+            CreationProperties = creationProperties,
         };
+
+        var toolbar = new ToolStrip
+        {
+            AutoSize = true,
+            BackColor = SystemColors.Control,
+            Dock = DockStyle.Top,
+            ForeColor = SystemColors.ControlText,
+            GripStyle = ToolStripGripStyle.Hidden,
+            Padding = new Padding(8, 4, 8, 4),
+            Renderer = new ToolStripSystemRenderer(),
+        };
+        backButton.Enabled = false;
+        homeButton.Enabled = false;
+        settingsButton.Enabled = false;
+        reloadButton.Enabled = false;
+        toolbar.Items.AddRange(
+        [
+            backButton,
+            new ToolStripSeparator(),
+            homeButton,
+            settingsButton,
+            new ToolStripSeparator(),
+            reloadButton,
+        ]);
         Controls.Add(browser);
+        Controls.Add(toolbar);
+
+        backButton.Click += (_, _) =>
+        {
+            if (browser.CoreWebView2?.CanGoBack == true) browser.CoreWebView2.GoBack();
+        };
+        homeButton.Click += async (_, _) => await OpenClientFromConfig(showErrors: true);
+        settingsButton.Click += (_, _) => NavigateInWindow(uiUri);
+        reloadButton.Click += (_, _) => browser.CoreWebView2?.Reload();
         Shown += async (_, _) => await InitializeBrowser();
         healthTimer.Tick += async (_, _) => await CheckServiceHealth();
         FormClosed += (_, _) =>
@@ -382,6 +455,7 @@ internal sealed class ControlPanelWindow : Form
             healthTimer.Stop();
             healthTimer.Dispose();
             healthClient.Dispose();
+            configClient.Dispose();
         };
     }
 
@@ -390,42 +464,108 @@ internal sealed class ControlPanelWindow : Form
         try
         {
             await browser.EnsureCoreWebView2Async().WaitAsync(TimeSpan.FromSeconds(20));
-            browser.CoreWebView2.Settings.IsStatusBarEnabled = false;
-            browser.CoreWebView2.Settings.IsZoomControlEnabled = true;
-            browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
-            browser.CoreWebView2.NewWindowRequested += (_, args) =>
+            var core = browser.CoreWebView2;
+            core.Settings.IsStatusBarEnabled = false;
+            core.Settings.IsZoomControlEnabled = true;
+            core.Settings.AreDevToolsEnabled = false;
+            await InjectCompanionMarker(core);
+
+            core.NewWindowRequested += (_, args) =>
             {
                 args.Handled = true;
-                OpenExternal(args.Uri);
+                if (IsTrustedAddress(args.Uri) && Uri.TryCreate(args.Uri, UriKind.Absolute, out var uri))
+                {
+                    NavigateInWindow(uri);
+                }
+                else
+                {
+                    OpenExternal(args.Uri);
+                }
             };
-            browser.CoreWebView2.NavigationStarting += (_, args) =>
+            core.NavigationStarting += (_, args) =>
             {
-                if (IsLocalUiAddress(args.Uri)) return;
+                if (IsTrustedAddress(args.Uri)) return;
                 args.Cancel = true;
                 OpenExternal(args.Uri);
             };
+            core.PermissionRequested += (_, args) =>
+            {
+                if (webAppUri is not null && IsSameOrigin(args.Uri, webAppUri)) return;
+                args.SavesInProfile = false;
+                args.State = CoreWebView2PermissionState.Deny;
+            };
+            core.ScreenCaptureStarting += (_, args) =>
+            {
+                if (webAppUri is not null &&
+                    IsSameOrigin(args.OriginalSourceFrameInfo.Source, webAppUri)) return;
+                args.Cancel = true;
+            };
+            core.WebMessageReceived += async (_, args) =>
+            {
+                string message;
+                try
+                {
+                    message = args.TryGetWebMessageAsString();
+                }
+                catch
+                {
+                    return;
+                }
+                if (message == "open-client") await OpenClientFromConfig(showErrors: true);
+            };
+            core.HistoryChanged += (_, _) => UpdateToolbar();
+            core.NavigationCompleted += (_, _) => UpdateToolbar();
+            core.DocumentTitleChanged += (_, _) => UpdateWindowTitle();
 
-            var navigation = new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>(
-                TaskCreationOptions.RunContinuationsAsynchronously);
-            browser.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
-            browser.CoreWebView2.Navigate(uiUri.AbsoluteUri);
-            var result = await navigation.Task.WaitAsync(TimeSpan.FromSeconds(20));
-            browser.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
-            if (!result.IsSuccess)
+            var strictConfig = smokeExpectedTitle is not null;
+            var destination = await GetClientDestination(strictConfig);
+            if (strictConfig && webAppUri is null)
             {
                 throw new InvalidOperationException(
-                    $"The local control panel failed to load ({result.WebErrorStatus}).");
+                    "The smoke test expected a web client, but no webAppUrl is configured.");
             }
+
+            CoreWebView2NavigationCompletedEventArgs result;
+            try
+            {
+                result = await NavigateAndWait(destination, TimeSpan.FromSeconds(20));
+            }
+            catch (TimeoutException) when (!strictConfig && !IsSameOrigin(destination, uiUri))
+            {
+                destination = uiUri;
+                result = await NavigateAndWait(uiUri, TimeSpan.FromSeconds(20));
+            }
+            if (!result.IsSuccess)
+            {
+                if (strictConfig || IsSameOrigin(destination, uiUri))
+                {
+                    throw new InvalidOperationException(
+                        $"The Companion page failed to load ({result.WebErrorStatus}).");
+                }
+                result = await NavigateAndWait(uiUri, TimeSpan.FromSeconds(20));
+                if (!result.IsSuccess)
+                {
+                    throw new InvalidOperationException(
+                        $"The local settings page failed to load ({result.WebErrorStatus}).");
+                }
+            }
+
+            homeButton.Enabled = true;
+            settingsButton.Enabled = true;
+            reloadButton.Enabled = true;
             healthTimer.Start();
             if (smokeTest)
             {
-                await Task.Delay(250);
+                if (smokeExpectedTitle is not null)
+                {
+                    await WaitForDocumentTitle(smokeExpectedTitle, TimeSpan.FromSeconds(20));
+                }
+                else
+                {
+                    await Task.Delay(250);
+                }
                 Close();
             }
-
-            void OnNavigationCompleted(
-                object? sender,
-                CoreWebView2NavigationCompletedEventArgs args) => navigation.TrySetResult(args);
         }
         catch (Exception error)
         {
@@ -464,18 +604,202 @@ internal sealed class ControlPanelWindow : Form
         if (failedHealthChecks >= 2 && !IsDisposed) Close();
     }
 
-    private bool IsLocalUiAddress(string value)
+    private async Task OpenClientFromConfig(bool showErrors)
+    {
+        if (openingClient || IsDisposed || browser.CoreWebView2 is null) return;
+        openingClient = true;
+        try
+        {
+            var destination = await GetClientDestination(strict: true);
+            NavigateInWindow(destination);
+        }
+        catch (Exception error)
+        {
+            if (showErrors && !IsDisposed)
+            {
+                MessageBox.Show(
+                    this,
+                    $"Could not open the voice-chat client.\n\n{error.Message}",
+                    "LiveKit Companion",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
+        finally
+        {
+            openingClient = false;
+        }
+    }
+
+    private async Task<Uri> GetClientDestination(bool strict)
+    {
+        try
+        {
+            using var response = await configClient.GetAsync(clientConfigUri);
+            response.EnsureSuccessStatusCode();
+            await using var body = await response.Content.ReadAsStreamAsync();
+            using var config = await JsonDocument.ParseAsync(body);
+            if (!config.RootElement.TryGetProperty("webAppUrl", out var value))
+            {
+                throw new InvalidOperationException("The Companion client configuration is incomplete.");
+            }
+
+            webAppUri = value.ValueKind switch
+            {
+                JsonValueKind.Null => null,
+                JsonValueKind.String => ParseWebAppUri(value.GetString()),
+                _ => throw new InvalidOperationException("The configured webAppUrl is invalid."),
+            };
+            return webAppUri ?? uiUri;
+        }
+        catch when (!strict)
+        {
+            return webAppUri ?? uiUri;
+        }
+    }
+
+    private static Uri? ParseWebAppUri(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || !string.IsNullOrEmpty(uri.UserInfo))
+        {
+            throw new InvalidOperationException("The configured webAppUrl is not an absolute URL.");
+        }
+        if (uri.Scheme == Uri.UriSchemeHttps ||
+            (uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback)) return uri;
+        throw new InvalidOperationException(
+            "The configured webAppUrl must use HTTPS (or loopback HTTP for development).");
+    }
+
+    private async Task<CoreWebView2NavigationCompletedEventArgs> NavigateAndWait(
+        Uri destination,
+        TimeSpan timeout)
+    {
+        var navigation = new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        ulong? navigationId = null;
+        EventHandler<CoreWebView2NavigationStartingEventArgs> startingHandler =
+            (_, args) => navigationId ??= args.NavigationId;
+        EventHandler<CoreWebView2NavigationCompletedEventArgs> handler =
+            (_, args) =>
+            {
+                if (args.NavigationId == navigationId) navigation.TrySetResult(args);
+            };
+        browser.CoreWebView2.NavigationStarting += startingHandler;
+        browser.CoreWebView2.NavigationCompleted += handler;
+        try
+        {
+            browser.CoreWebView2.Navigate(destination.AbsoluteUri);
+            return await navigation.Task.WaitAsync(timeout);
+        }
+        finally
+        {
+            browser.CoreWebView2.NavigationStarting -= startingHandler;
+            browser.CoreWebView2.NavigationCompleted -= handler;
+        }
+    }
+
+    private async Task WaitForDocumentTitle(string expected, TimeSpan timeout)
+    {
+        var timer = Stopwatch.StartNew();
+        while (timer.Elapsed < timeout && !IsDisposed)
+        {
+            if (string.Equals(
+                    browser.CoreWebView2.DocumentTitle,
+                    expected,
+                    StringComparison.Ordinal)) return;
+            await Task.Delay(100);
+        }
+        throw new InvalidOperationException(
+            $"The web client title did not become \"{expected}\" " +
+            $"(actual: \"{browser.CoreWebView2.DocumentTitle}\").");
+    }
+
+    private static async Task InjectCompanionMarker(CoreWebView2 core)
+    {
+        var script =
+            "if (window === window.top && " +
+            "!Object.prototype.hasOwnProperty.call(window, '__LIVEKIT_COMPANION__')) {" +
+            "Object.defineProperty(window, '__LIVEKIT_COMPANION__', {" +
+            "value: Object.freeze({host: 'webview2', platform: 'windows', version: 1}), " +
+            "configurable: false, enumerable: true, writable: false" +
+            "});}";
+        await core.AddScriptToExecuteOnDocumentCreatedAsync(script);
+    }
+
+    private void NavigateInWindow(Uri destination)
+    {
+        if (browser.CoreWebView2 is null || !IsTrustedAddress(destination)) return;
+        browser.CoreWebView2.Navigate(destination.AbsoluteUri);
+    }
+
+    private bool IsTrustedAddress(string value)
     {
         return Uri.TryCreate(value, UriKind.Absolute, out var candidate) &&
-               candidate.Scheme == uiUri.Scheme &&
-               candidate.Host == uiUri.Host &&
-               candidate.Port == uiUri.Port;
+               IsTrustedAddress(candidate);
+    }
+
+    private bool IsTrustedAddress(Uri candidate)
+    {
+        return IsSameOrigin(candidate, uiUri) ||
+               (webAppUri is not null && IsSameOrigin(candidate, webAppUri));
+    }
+
+    private static bool IsSameOrigin(string value, Uri expected)
+    {
+        return Uri.TryCreate(value, UriKind.Absolute, out var candidate) &&
+               IsSameOrigin(candidate, expected);
+    }
+
+    private static bool IsSameOrigin(Uri candidate, Uri expected)
+    {
+        return string.Equals(candidate.Scheme, expected.Scheme, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(candidate.IdnHost, expected.IdnHost, StringComparison.OrdinalIgnoreCase) &&
+               candidate.Port == expected.Port;
+    }
+
+    private void UpdateToolbar()
+    {
+        if (!IsDisposed && browser.CoreWebView2 is not null)
+        {
+            backButton.Enabled = browser.CoreWebView2.CanGoBack;
+        }
+    }
+
+    private void UpdateWindowTitle()
+    {
+        if (IsDisposed || browser.CoreWebView2 is null) return;
+        var documentTitle = NullIfWhiteSpace(browser.CoreWebView2.DocumentTitle);
+        Text = documentTitle is null ? "LiveKit Companion" : $"{documentTitle} — LiveKit Companion";
+    }
+
+    private static ToolStripButton CreateToolbarButton(string text)
+    {
+        return new ToolStripButton(text)
+        {
+            AutoSize = true,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Margin = new Padding(2, 0, 2, 0),
+            Padding = new Padding(6, 2, 6, 2),
+        };
+    }
+
+    private static string? NullIfWhiteSpace(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     private static void OpenExternal(string value)
     {
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)) return;
-        Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true })?.Dispose();
+        try
+        {
+            Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true })?.Dispose();
+        }
+        catch
+        {
+            // A missing or locked-down default browser should not crash the Companion window.
+        }
     }
 }

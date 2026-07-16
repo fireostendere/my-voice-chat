@@ -13,9 +13,12 @@
     <ApplicationIcon>..\assets\livekit-companion.ico</ApplicationIcon>
     <AssemblyTitle>LiveKit Companion</AssemblyTitle>
     <Product>LiveKit Companion</Product>
-    <Description>Local media and push-to-talk companion for LiveKit</Description>
+    <Description>Windows WebView2 client with local push-to-talk and BitTorrent bridge for LiveKit voice chat</Description>
     <Company>fireostendere</Company>
   </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="CompanionWebAppUrl" Value="$(CompanionWebAppUrl)" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
   </ItemGroup>
