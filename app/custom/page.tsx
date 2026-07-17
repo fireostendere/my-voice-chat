@@ -1,5 +1,6 @@
 import { videoCodecs } from 'livekit-client';
 import { VideoConferenceClientImpl } from './VideoConferenceClientImpl';
+import { CompanionRouteGate } from '@/lib/CompanionRouteGate';
 import { isVideoCodec } from '@/lib/types';
 
 export default async function CustomRoomConnection(props: {
@@ -22,13 +23,15 @@ export default async function CustomRoomConnection(props: {
   }
 
   return (
-    <main data-lk-theme="default" style={{ height: '100%' }}>
-      <VideoConferenceClientImpl
-        liveKitUrl={liveKitUrl}
-        token={token}
-        codec={codec}
-        singlePeerConnection={singlePC === 'true'}
-      />
-    </main>
+    <CompanionRouteGate>
+      <main data-lk-theme="default" style={{ height: '100%' }}>
+        <VideoConferenceClientImpl
+          liveKitUrl={liveKitUrl}
+          token={token}
+          codec={codec}
+          singlePeerConnection={singlePC === 'true'}
+        />
+      </main>
+    </CompanionRouteGate>
   );
 }

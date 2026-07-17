@@ -48,11 +48,10 @@ function DemoMeetingTab(props: { label: string }) {
   const [e2ee, setE2ee] = useState(false);
   const [sharedPassphrase, setSharedPassphrase] = useState(randomString(64));
   const startMeeting = () => {
-    if (e2ee) {
-      router.push(`/rooms/${generateRoomId()}#${encodePassphrase(sharedPassphrase)}`);
-    } else {
-      router.push(`/rooms/${generateRoomId()}`);
-    }
+    const roomUrl = `/rooms/${generateRoomId()}${
+      e2ee ? `#${encodePassphrase(sharedPassphrase)}` : ''
+    }`;
+    router.push(roomUrl);
   };
   return (
     <div className={styles.tabContent}>
@@ -91,19 +90,17 @@ function CustomConnectionTab(props: { label: string }) {
 
   const [e2ee, setE2ee] = useState(false);
   const [sharedPassphrase, setSharedPassphrase] = useState(randomString(64));
-
   const onSubmit: React.FormEventHandler<HTMLFormElement> = (event) => {
     event.preventDefault();
     const formData = new FormData(event.target as HTMLFormElement);
-    const serverUrl = formData.get('serverUrl');
-    const token = formData.get('token');
-    if (e2ee) {
-      router.push(
-        `/custom/?liveKitUrl=${serverUrl}&token=${token}#${encodePassphrase(sharedPassphrase)}`,
-      );
-    } else {
-      router.push(`/custom/?liveKitUrl=${serverUrl}&token=${token}`);
-    }
+    const params = new URLSearchParams({
+      liveKitUrl: String(formData.get('serverUrl') ?? ''),
+      token: String(formData.get('token') ?? ''),
+    });
+    const customUrl = `/custom/?${params.toString()}${
+      e2ee ? `#${encodePassphrase(sharedPassphrase)}` : ''
+    }`;
+    router.push(customUrl);
   };
   return (
     <form className={styles.tabContent} onSubmit={onSubmit}>

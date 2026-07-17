@@ -9,6 +9,13 @@ export function getCompanionWsUrl(): string {
   return process.env.NEXT_PUBLIC_PTT_WS_URL || DEFAULT_COMPANION_WS_URL;
 }
 
+// Room URLs may contain a LiveKit JWT in the query and an E2EE secret in the
+// fragment. Never inherit the legacy PTT override here: it may intentionally
+// point at a remote WebSocket, while native handoff must stay on loopback.
+export function getCompanionNavigationWsUrl(): string {
+  return process.env.NEXT_PUBLIC_COMPANION_WS_URL ?? DEFAULT_COMPANION_WS_URL;
+}
+
 export function getPushToTalkWsUrl(): string {
   return (
     process.env.NEXT_PUBLIC_PTT_WS_URL ??

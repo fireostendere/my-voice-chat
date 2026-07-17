@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { PageClientImpl } from './PageClientImpl';
+import { CompanionRouteGate } from '@/lib/CompanionRouteGate';
 import { isVideoCodec } from '@/lib/types';
 
 export default async function Page({
@@ -25,12 +26,14 @@ export default async function Page({
   const singlePC = _searchParams.singlePC !== 'false';
 
   return (
-    <PageClientImpl
-      roomName={_params.roomName}
-      region={_searchParams.region}
-      hq={hq}
-      codec={codec}
-      singlePeerConnection={singlePC}
-    />
+    <CompanionRouteGate>
+      <PageClientImpl
+        roomName={_params.roomName}
+        region={_searchParams.region}
+        hq={hq}
+        codec={codec}
+        singlePeerConnection={singlePC}
+      />
+    </CompanionRouteGate>
   );
 }
