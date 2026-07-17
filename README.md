@@ -46,7 +46,8 @@ customized fork of [LiveKit Meet](https://github.com/livekit/meet).
 - 🍿 **Synchronized room cinema** for direct MP4/WebM/Ogg URLs, HLS streams,
   YouTube and VK Video links, local files, and host-side torrents shared over LiveKit.
 - 🖥️ **Windows Companion desktop client** built with WinForms and WebView2, with
-  global push-to-talk, regular BitTorrent peers, and the complete web app in one window.
+  automatic room-link handoff, global push-to-talk, regular BitTorrent peers, and the
+  complete web app in one window.
 
 ## Tech stack
 
@@ -156,7 +157,7 @@ CI runs `lint`, `format:check`, and `test` on every push and pull request.
 | `NEXT_PUBLIC_LK_RECORD_ENDPOINT`                               | Base path for recording controls, e.g. `/api/record`. Recording UI is hidden if unset.    |
 | `NEXT_PUBLIC_CONN_DETAILS_ENDPOINT`                            | Override the token endpoint (default `/api/connection-details`).                          |
 | `NEXT_PUBLIC_DATADOG_CLIENT_TOKEN`, `NEXT_PUBLIC_DATADOG_SITE` | If both set, forward client logs to Datadog.                                              |
-| `NEXT_PUBLIC_COMPANION_WS_URL`                                 | Local companion URL for PTT and standard BitTorrent peers.                                |
+| `NEXT_PUBLIC_COMPANION_WS_URL`                                 | Local companion URL for room handoff, PTT, and standard BitTorrent peers.                 |
 | `NEXT_PUBLIC_PTT_WS_URL`                                       | Push-to-talk companion URL (default `ws://127.0.0.1:7331`; empty disables it).            |
 
 The companion download endpoint accepts the server-only `COMPANION_EXE_URL` override
@@ -211,9 +212,14 @@ host can choose one of three source modes:
   both cases only the host downloads the torrent; viewers receive one LiveKit media
   stream and never join the swarm.
 
-Only the current host can replace or stop an active linked source. If the host leaves,
-viewers release the stale player after the heartbeat timeout. Viewers may need to click
-the playback overlay once because browsers block unmuted autoplay.
+Only the participant who started a linked source receives playback commands,
+fullscreen, picture-in-picture, and stop actions. Direct viewer video controls are
+hidden, YouTube is requested with `controls=0`, and all viewer media and iframes reject
+pointer and keyboard interaction. VK's cross-origin player chrome cannot be hidden
+reliably and may remain visible, but an interaction shield makes it inert; synchronized
+control packets are still accepted only from the recorded host. A viewer may still need
+to click the dedicated playback overlay once because browsers block unmuted autoplay.
+If the host leaves, viewers release the stale player after the heartbeat timeout.
 
 Pasted VK URLs are never embedded verbatim. The client sends only a validated
 `ownerId_videoId[_accessKey]` identity and rebuilds the official
@@ -249,6 +255,28 @@ open in the system browser. Camera, microphone, and screen-capture permissions a
 available only to the configured app origin. The injected
 `window.__LIVEKIT_COMPANION__` marker lets the web UI hide its installer link.
 
+When a regular browser reaches a managed `/rooms/<roomName>` or custom `/custom` route,
+that route gates the LiveKit client before it can mount. Browser code probes only a
+loopback Companion WebSocket and requires protocol v3 plus the `open-room` capability;
+the landing page itself only navigates to the route. A running packaged Companion
+validates the exact same-origin room URL and opens or reuses the native window with its
+path, query parameters, and E2EE hash preserved.
+
+Before the command is sent, an absent, stopped, old, or incompatible Companion leaves
+the normal browser flow unchanged. After `open-room` is sent, the current tab fails
+closed: an accepted request, explicit rejection, lost acknowledgement, or timeout all
+leave it passive with the LiveKit room unmounted. This prevents a second participant and
+duplicate audio even when native completion is uncertain. The old tab has no resume
+button and never starts the room automatically. To use the browser instead, choose
+**Exit** from the Companion tray icon (or otherwise stop its background service), then
+reload the room link or open it in a new tab. Closing only the native window with X is not
+enough because the still-running service will reopen it on the next handoff.
+
+This presence check necessarily runs in the served page: a remote Next.js process cannot
+inspect `127.0.0.1` on a user's PC. The installer enables background startup by default,
+so the silent loopback check can also open a currently closed native window without a
+custom-URL browser prompt.
+
 Release builds open the managed origin embedded from `COMPANION_WEB_APP_URL`. In an
 unmanaged development installation, use **Settings → Voice-chat server → Connect in
 app**; the normalized HTTPS origin is saved locally and approved for both PTT and
@@ -263,12 +291,19 @@ stored per user. `127.0.0.1:7331` always means the user's own PC, not the deploy
 server. An exact `COMPANION_ORIGINS` allowlist remains authoritative for managed
 installations and disables interactive origin changes.
 
+Room handoff is additionally restricted to exact same-origin `/rooms/<one-segment>` and
+`/custom` URLs. The full URL, including a possible custom JWT and E2EE hash, is never
+placed in a process argument, file, or log: the Node service passes bounded JSON to the
+single WebView2 window through a current-user-only Windows named pipe, and the native
+client repeats the URL, route, and origin checks before navigating.
+
 The LiveKit tray icon reopens the client or exits the service. Autostart launches the
 service and tray without forcing the client window to the foreground. Remove the app
 with **Uninstall LiveKit Companion** or **Windows Settings → Apps → Installed apps**.
 The Windows release job installs the final EXE and smoke-tests WebView2, camera and
 microphone access, WebRTC, `captureStream()`, the native marker, companion capabilities,
-startup, and uninstallation before publishing an installer.
+an exact same-window room handoff (including query and hash), startup, and uninstallation
+before publishing an installer.
 
 ## Deployment
 

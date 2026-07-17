@@ -2,7 +2,7 @@
 
 LiveKit Companion combines three pieces in one Windows application:
 
-- the complete voice-chat web client in a WinForms/WebView2 window;
+- the complete voice-chat web client in a WinForms/WebView2 window with room-link handoff;
 - global push-to-talk, even while a game or another window has focus;
 - a localhost bridge to standard BitTorrent peers for the room cinema.
 
@@ -52,9 +52,9 @@ background service, waits for it to become ready, and opens the complete voice-c
 client in its own WinForms/WebView2 window. The native toolbar switches between
 **Home / Chat** and the localhost **Settings** page and also provides Back and Reload.
 Links to other origins open in the default browser. The window and its taskbar entry
-belong to `LiveKitCompanion.exe` and use the embedded LiveKit icon. The user-facing shortcuts
-point directly to this EXE; there are no batch or VBS launchers and no config files to
-edit. The LiveKit tray icon can reopen the client or exit the service. Use **Uninstall
+belong to `LiveKitCompanion.exe` and use the embedded LiveKit icon. The user-facing
+shortcuts point directly to this EXE; there are no batch or VBS launchers and no config
+files to edit. The LiveKit tray icon can reopen the client or exit the service. Use **Uninstall
 LiveKit Companion** or **Windows Settings → Apps → Installed apps** to remove it.
 
 The first time a deployed voice-chat site connects, the embedded WebView2 client or a
@@ -62,6 +62,27 @@ regular Chrome/Edge browser may ask to access devices on the local network; allo
 the page can reach the app on this PC. The companion then displays its own Windows
 approval dialog. Verify the site origin and choose **Yes**. The companion remembers
 approved origins under `%LOCALAPPDATA%\LiveKitCompanion`.
+
+After that, reaching a managed `/rooms/<roomName>` link or custom `/custom?...` link in
+a regular browser gates the LiveKit client before it mounts. The destination page, not
+the landing page or remote server, checks a strictly loopback WebSocket and requires
+protocol v3 with the `open-room` capability. The packaged service opens or reuses the
+Companion window at the exact URL, preserving query parameters and the E2EE fragment.
+
+An unavailable or incompatible service leaves the browser flow unchanged only while no
+command has been sent. After `open-room` is sent, acceptance, explicit rejection, a lost
+reply, or timeout all leave the current tab passive. It never mounts the room, acquires
+media, produces duplicate audio, or resumes automatically, and there is no in-page
+browser-resume button. To use the browser, choose **Exit** from the Companion tray icon
+or otherwise stop the background service, then reload the link or open it in a new tab.
+Closing only the native window with X is not enough: the running background service can
+relaunch it on the next handoff.
+
+The check is performed by the page, not by the remote Next.js process: only code on the
+user's PC can probe `127.0.0.1`. Background startup is selected by default in the
+installer, so a running service can open a closed native window silently. A manual
+`npm start` service has no packaged launcher and therefore does not advertise room
+handoff.
 
 Release builds open the managed web-app origin embedded by the Windows workflow. It
 uses the `COMPANION_WEB_APP_URL` repository variable and falls back to
@@ -131,7 +152,8 @@ dotnet build companion/ptt-helper/PttKeyState.csproj -c Release -r win-x64
 ```
 
 The release workflow performs the final self-contained publish, Native AOT build,
-Inno Setup packaging, installed WebView2 smoke test, and uninstallation test on Windows.
+Inno Setup packaging, installed WebView2 room-handoff smoke test, and uninstallation test
+on Windows.
 The installed layout includes the bundled Node runtime and service files expected by
 the launcher; a standalone launcher build is primarily a compile check.
 
@@ -200,6 +222,13 @@ and WebM are the most portable choices; MKV and HEVC support varies by browser a
   Settings. Navigation outside those exact origins is cancelled, external HTTP(S)
   links open in the default browser, and WebView permissions or screen capture are
   denied outside the selected app origin.
+- `open-room` is exposed only when the packaged launcher exists, and only the selected
+  app origin may request exact same-origin `/rooms/<one-segment>` or `/custom` URLs. The
+  full URL can contain a JWT and E2EE fragment, so it is never put in process arguments,
+  persistent files, or logs. Node sends bounded JSON through
+  `LiveKitCompanion.Navigation.<UI_PORT>`, a Windows named pipe restricted to the current
+  user; WebView2 independently validates the scheme, credentials, route, and exact origin
+  again before navigating.
 - Every top-level document receives a frozen marker:
   `window.__LIVEKIT_COMPANION__ = { host: 'webview2', platform: 'windows', version: 1 }`.
   The web app uses it to hide the installer link inside the installed client.

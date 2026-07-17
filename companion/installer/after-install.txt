@@ -5,6 +5,15 @@ automatically and opens the voice-chat client in its own window. Use the native 
 button to capture the global push-to-talk key, send magnet links or .torrent files to an
 active room, and control playback there.
 
+When the background service is running, room links opened on the configured website are
+handed to this window automatically. Once a handoff command is sent, that browser tab
+stays paused even if confirmation is lost or rejected, so it cannot create a second
+connection or duplicate audio.
+
+To use the browser instead, choose Exit from the LiveKit tray icon, then reload the room
+link or open it in a new tab. Closing only the client window with X does not stop the
+background service, and the old paused tab never resumes automatically.
+
 If the Chat page is not configured or cannot load, open Settings > Voice-chat server,
 enter the HTTPS address of your deployed web app, and choose Connect in app. HTTP is
 accepted only for local loopback development.

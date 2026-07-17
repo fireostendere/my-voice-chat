@@ -10,7 +10,8 @@ It is a **Next.js 15 App Router** front end on top of the LiveKit realtime SDKs
 Handlers that mint access tokens and drive room recording (Egress). There is no
 database or custom deployed media backend — all realtime media is handled by a
 LiveKit server (LiveKit Cloud or self-hosted). The optional Windows Companion combines
-the same web client in WinForms/WebView2 with loopback PTT and BitTorrent services.
+the same web client in WinForms/WebView2 with automatic room-link handoff, loopback PTT,
+and BitTorrent services.
 
 See `ARCHITECTURE.md` for the full picture.
 
@@ -63,7 +64,10 @@ Two ways to join a room, each with its own entry route and client component:
 | **Demo / managed** | `app/rooms/[roomName]/page.tsx` | `GET /api/connection-details` mints a JWT server-side | `app/rooms/[roomName]/PageClientImpl.tsx`  |
 | **Custom**         | `app/custom/page.tsx`           | URL already carries `liveKitUrl` + `token` (BYO)      | `app/custom/VideoConferenceClientImpl.tsx` |
 
-- The landing page (`app/page.tsx`) is just a tabbed launcher for those two modes.
+- The landing page (`app/page.tsx`) is a tabbed launcher for those two modes. It only
+  navigates to the generated room route; Companion detection happens on that destination.
+- Both destination page shells wrap their client in `CompanionRouteGate`. The gate must
+  resolve before either LiveKit client mounts, especially the auto-connecting custom flow.
 - Both client components build a `livekit-client` `Room`, connect, and render the
   prefab `<VideoConference />` from `@livekit/components-react` inside a `RoomContext.Provider`.
 - Server route handlers (`app/api/**`) are the only server code:
@@ -108,7 +112,7 @@ Public (`NEXT_PUBLIC_*`, shipped to the browser):
 | `NEXT_PUBLIC_LK_RECORD_ENDPOINT`                                | unset                     | Base path for recording controls (e.g. `/api/record`). Recording UI is hidden if unset.                          |
 | `NEXT_PUBLIC_CONN_DETAILS_ENDPOINT`                             | `/api/connection-details` | Override the token endpoint (used by `PageClientImpl`).                                                          |
 | `NEXT_PUBLIC_DATADOG_CLIENT_TOKEN` / `NEXT_PUBLIC_DATADOG_SITE` | unset                     | If both set, LiveKit client logs are forwarded to Datadog (`lib/Debug.tsx`).                                     |
-| `NEXT_PUBLIC_COMPANION_WS_URL`                                  | `ws://127.0.0.1:7331`     | Local companion endpoint for torrent cinema and, unless overridden, PTT.                                         |
+| `NEXT_PUBLIC_COMPANION_WS_URL`                                  | `ws://127.0.0.1:7331`     | Local endpoint for room handoff, torrent cinema, and, unless overridden, PTT.                                    |
 | `NEXT_PUBLIC_PTT_WS_URL`                                        | companion URL             | Override the PTT endpoint. Set empty to disable only global push-to-talk.                                        |
 
 Companion packaging/runtime (not Next.js `.env.local`):
@@ -162,6 +166,29 @@ Room behavior is tuned through query/hash parameters rather than settings:
   `window.__LIVEKIT_COMPANION__ = { host: 'webview2', platform: 'windows', version: 1 }`.
   Keep it frozen/versioned. WebView2 may navigate only the configured app origin and
   localhost Settings; permissions and screen capture belong only to the app origin.
+- **Companion detection is necessarily browser-side and route-local.** A Next.js Route
+  Handler cannot inspect the user's `127.0.0.1`. Each room route's
+  `CompanionRouteGate` probes only a loopback WebSocket and accepts only protocol v3 with
+  `open-room`; the landing page itself does not probe. The exact WebView marker bypasses
+  the gate to prevent a handoff loop.
+- **Fail closed after sending `open-room`.** Before a command is sent, an unavailable or
+  incompatible Companion lets the browser room mount normally. Once a compatible service
+  receives the command, acceptance, explicit rejection, a lost reply, timeout, or abort
+  must all leave that tab passive: the native navigation may already be in flight. There
+  is deliberately no in-page resume action and an old passive tab never auto-resumes. To
+  use the browser instead, exit the Companion background service from its tray icon (the
+  window's X alone is insufficient), then reload the link or open it in a new tab.
+- **Treat room handoff URLs as secrets.** `/custom` can carry a JWT in its query and the
+  hash can carry an E2EE passphrase. Validate WebSocket Origin = configured app origin =
+  target origin, restrict paths to `/rooms/<name>` or `/custom`, and pass the full URL only
+  through the bounded current-user named pipe. Never put it in argv, files, or logs.
+- **Cinema viewers do not own playback controls.** Only `embed.isHost` may receive
+  playback commands, fullscreen, picture-in-picture, or stop actions. Keep direct viewer
+  media controls hidden and unfocusable, YouTube at `controls=0`, and every viewer media
+  surface/iframe shielded from pointer and keyboard input. VK's cross-origin player chrome
+  cannot be hidden reliably and may remain visible under the shield, but it must be inert;
+  control packets are still accepted only from the recorded host. The autoplay-gesture
+  overlay is the one intentional viewer interaction.
 - **`GET /api/client-config` is deliberately tokenless but loopback-only.** Settings
   mutations remain protected by the in-memory token plus exact localhost same-origin
   validation. Do not expose that Settings server beyond `127.0.0.1`.
