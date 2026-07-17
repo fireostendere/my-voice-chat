@@ -375,6 +375,7 @@ internal sealed class CompanionWindow : Form
     private const string FakeMediaArguments =
         "--use-fake-ui-for-media-stream --use-fake-device-for-media-stream";
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
+    private static readonly string CompanionAppVersion = ResolveCompanionAppVersion();
 
     private readonly Uri uiUri;
     private readonly Uri clientConfigUri;
@@ -1167,7 +1168,8 @@ internal sealed class CompanionWindow : Form
             "if (window === window.top && " +
             "!Object.prototype.hasOwnProperty.call(window, '__LIVEKIT_COMPANION__')) {" +
             "Object.defineProperty(window, '__LIVEKIT_COMPANION__', {" +
-            "value: Object.freeze({host: 'webview2', platform: 'windows', version: 1}), " +
+            "value: Object.freeze({host: 'webview2', platform: 'windows', version: 1, " +
+            "appVersion: " + JsonSerializer.Serialize(CompanionAppVersion) + "}), " +
             "configurable: false, enumerable: true, writable: false" +
             "});}";
         await core.AddScriptToExecuteOnDocumentCreatedAsync(script);
@@ -1233,6 +1235,19 @@ internal sealed class CompanionWindow : Form
     private static string? NullIfWhiteSpace(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string ResolveCompanionAppVersion()
+    {
+        var informationalVersion = Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion;
+        if (NullIfWhiteSpace(informationalVersion) is { } version) return version;
+
+        var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version;
+        return assemblyVersion is null
+            ? "0.0.0"
+            : $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{Math.Max(assemblyVersion.Build, 0)}";
     }
 
     private static void OpenExternal(string value)

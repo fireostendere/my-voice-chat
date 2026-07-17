@@ -229,9 +229,10 @@ and WebM are the most portable choices; MKV and HEVC support varies by browser a
   `LiveKitCompanion.Navigation.<UI_PORT>`, a Windows named pipe restricted to the current
   user; WebView2 independently validates the scheme, credentials, route, and exact origin
   again before navigating.
-- Every top-level document receives a frozen marker:
-  `window.__LIVEKIT_COMPANION__ = { host: 'webview2', platform: 'windows', version: 1 }`.
-  The web app uses it to hide the installer link inside the installed client.
+- Every top-level document receives a frozen `window.__LIVEKIT_COMPANION__` marker with
+  `host: 'webview2'`, `platform: 'windows'`, marker protocol `version: 1`, and installed
+  `appVersion: '<semver>'`. The web app compares the app version with its packaged Companion
+  version to offer newer installers.
 - Torrent stream paths contain a random token.
 - `LiveKitCompanionNative.exe` polls only the configured virtual key. It does not
   install a global keyboard hook, enumerate other keys, collect typed characters, or

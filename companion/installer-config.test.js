@@ -7,6 +7,13 @@ const readInstallerFile = (name) =>
 const readRepoFile = (...parts) => readFileSync(path.join(process.cwd(), ...parts), 'utf8');
 
 describe('companion installer lifecycle', () => {
+  it('keeps the fallback installer version aligned with the site version source', () => {
+    const manifest = readInstallerFile('companion.iss');
+    const companionPackage = JSON.parse(readRepoFile('companion', 'package.json'));
+
+    expect(manifest).toContain(`#define AppVersion "${companionPackage.version}"`);
+  });
+
   it('installs a real application entry point instead of script shortcuts', () => {
     const manifest = readInstallerFile('companion.iss');
 
@@ -51,6 +58,8 @@ describe('companion installer lifecycle', () => {
     expect(launcher).toContain('--use-fake-ui-for-media-stream');
     expect(launcher).toContain('--use-fake-device-for-media-stream');
     expect(launcher).toContain('__LIVEKIT_COMPANION__');
+    expect(launcher).toContain('appVersion:');
+    expect(launcher).toContain('AssemblyInformationalVersionAttribute');
     expect(launcher).toContain('Application.Run(window)');
     expect(launcher).toContain('Icon.ExtractAssociatedIcon');
     expect(launcher).not.toContain('--app=');
@@ -80,6 +89,7 @@ describe('companion installer lifecycle', () => {
     expect(fixture).toContain("window.__LIVEKIT_COMPANION__?.host === 'webview2'");
     expect(fixture).toContain("window.__LIVEKIT_COMPANION__?.platform === 'windows'");
     expect(fixture).toContain('window.__LIVEKIT_COMPANION__?.version === 1');
+    expect(fixture).toContain("typeof window.__LIVEKIT_COMPANION__?.appVersion === 'string'");
     expect(fixture).toContain("hello.capabilities.includes('open-room')");
     expect(fixture).not.toContain("type: 'open-room'");
     expect(fixture).toContain("url.pathname === '/smoke-status'");
@@ -97,6 +107,7 @@ describe('companion installer lifecycle', () => {
     expect(handoff).toContain("result?.status === 'passed'");
 
     expect(workflow).toContain('"-p:CompanionWebAppUrl=$webAppUrl"');
+    expect(workflow).toContain('-p:Version=$version');
     expect(workflow).toContain('companion/scripts/webview-smoke-server.js');
     expect(workflow).toContain('companion/scripts/native-handoff-smoke-client.js');
     expect(workflow).toContain('$env:COMPANION_WEB_APP_URL = $fixtureUrl');

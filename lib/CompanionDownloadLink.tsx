@@ -2,12 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import styles from '../styles/CompanionDownloadLink.module.css';
-
-declare global {
-  interface Window {
-    __LIVEKIT_COMPANION__?: true | { host: 'webview2'; platform: 'windows'; version: number };
-  }
-}
+import { isCompanionWebView } from './companionMarker';
 
 export function CompanionDownloadLink({
   compact = false,
@@ -22,7 +17,7 @@ export function CompanionDownloadLink({
     const nativeHost = window.__LIVEKIT_COMPANION__;
     setRunningInCompanion(
       nativeHost === true ||
-        nativeHost?.host === 'webview2' ||
+        isCompanionWebView() ||
         navigator.userAgent.includes('LiveKitCompanion/'),
     );
   }, []);

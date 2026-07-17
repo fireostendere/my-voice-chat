@@ -56,7 +56,11 @@ const html = `<!doctype html>
         assert(
           window.__LIVEKIT_COMPANION__?.host === 'webview2' &&
             window.__LIVEKIT_COMPANION__?.platform === 'windows' &&
-            window.__LIVEKIT_COMPANION__?.version === 1,
+            window.__LIVEKIT_COMPANION__?.version === 1 &&
+            typeof window.__LIVEKIT_COMPANION__?.appVersion === 'string' &&
+            /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$/.test(
+              window.__LIVEKIT_COMPANION__.appVersion,
+            ),
           'The native Companion marker is missing.',
         );
         assert(navigator.mediaDevices?.getUserMedia, 'getUserMedia is unavailable.');

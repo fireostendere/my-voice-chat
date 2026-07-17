@@ -162,9 +162,10 @@ Room behavior is tuned through query/hash parameters rather than settings:
   `vkvideo.ru` hosts, serialize the validated owner/video/access-key tuple, and rebuild
   the canonical `https://vk.ru/video_ext.php` URL. Player messages must pass exact
   iframe-window, origin, and payload-schema checks.
-- **The desktop marker is an object, not a boolean:**
-  `window.__LIVEKIT_COMPANION__ = { host: 'webview2', platform: 'windows', version: 1 }`.
-  Keep it frozen/versioned. WebView2 may navigate only the configured app origin and
+- **The desktop marker is an object, not a boolean:** `window.__LIVEKIT_COMPANION__` is a
+  frozen object with `host: 'webview2'`, `platform: 'windows'`, marker protocol `version: 1`,
+  and installed `appVersion: '<semver>'`. The web UI compares `appVersion` with
+  `companion/package.json`. WebView2 may navigate only the configured app origin and
   localhost Settings; permissions and screen capture belong only to the app origin.
 - **Companion detection is necessarily browser-side and route-local.** A Next.js Route
   Handler cannot inspect the user's `127.0.0.1`. Each room route's

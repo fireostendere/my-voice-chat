@@ -1,6 +1,8 @@
 import '../styles/globals.css';
 import '@livekit/components-styles';
 import '@livekit/components-styles/prefabs';
+import { CompanionUpdatePrompt } from '@/lib/CompanionUpdatePrompt';
+import companionPackage from '@/companion/package.json';
 import type { Metadata, Viewport } from 'next';
 import { Toaster } from 'react-hot-toast';
 
@@ -53,6 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body data-lk-theme="default">
         <Toaster />
+        <CompanionUpdatePrompt latestVersion={companionPackage.version} />
         {children}
       </body>
     </html>

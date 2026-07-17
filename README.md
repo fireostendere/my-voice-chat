@@ -241,7 +241,8 @@ redirects to a Windows EXE installer from the rolling `companion-latest` GitHub
 release. The installer contains Node.js and all dependencies, installs without admin
 rights, installs the official Microsoft Edge WebView2 Runtime when needed, creates
 shortcuts, and can enable startup with Windows. A separate global Node.js installation
-is not required.
+is not required. The installed client reports its application version to the web UI; when
+the version published with the site is newer, an in-app notice offers the updated installer.
 
 The packaged PTT helper is built from this repository and checks only the configured
 virtual key. It replaces the previous third-party global keyboard hook; it does not
@@ -252,8 +253,9 @@ complete voice-chat web app in a WinForms/WebView2 window. Its native toolbar pr
 **Back**, **Home / Chat**, **Settings**, and **Reload**. Only the configured web-app
 origin and the loopback Settings origin can navigate inside the window; other links
 open in the system browser. Camera, microphone, and screen-capture permissions are
-available only to the configured app origin. The injected
-`window.__LIVEKIT_COMPANION__` marker lets the web UI hide its installer link.
+available only to the configured app origin. The injected `window.__LIVEKIT_COMPANION__`
+marker lets the web UI identify the desktop host and compare its installed version without
+exposing any local Settings credentials.
 
 When a regular browser reaches a managed `/rooms/<roomName>` or custom `/custom` route,
 that route gates the LiveKit client before it can mount. Browser code probes only a

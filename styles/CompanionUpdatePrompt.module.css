@@ -1,0 +1,103 @@
+.prompt {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 9000;
+  display: flex;
+  gap: 0.85rem;
+  width: min(28rem, calc(100vw - 2rem));
+  padding: 1rem;
+  color: rgba(255, 255, 255, 0.94);
+  background:
+    linear-gradient(120deg, rgba(255, 99, 82, 0.16), transparent 52%), rgba(23, 21, 21, 0.98);
+  border: 1px solid rgba(255, 141, 111, 0.42);
+  border-radius: 0.8rem;
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.42);
+}
+
+.icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  color: #1b0e0a;
+  background: linear-gradient(135deg, #ffb15c, #ff6352);
+  border-radius: 50%;
+}
+
+.icon svg {
+  width: 1.35rem;
+  height: 1.35rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.content {
+  min-width: 0;
+}
+
+.content strong {
+  font-size: 0.95rem;
+}
+
+.content p {
+  margin: 0.3rem 0 0.8rem;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.actions a,
+.actions button {
+  min-height: 2.25rem;
+  padding: 0.45rem 0.8rem;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border-radius: 0.45rem;
+  cursor: pointer;
+}
+
+.actions a {
+  display: inline-flex;
+  align-items: center;
+  color: #1b0e0a;
+  text-decoration: none;
+  background: linear-gradient(135deg, #ffb15c, #ff6352);
+  border: 1px solid rgba(255, 210, 163, 0.55);
+}
+
+.actions button {
+  color: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.actions a:hover,
+.actions button:hover {
+  filter: brightness(1.08);
+}
+
+.actions a:focus-visible,
+.actions button:focus-visible {
+  outline: 2px solid #fff2e5;
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .prompt {
+    right: 0.75rem;
+    bottom: 0.75rem;
+    width: calc(100vw - 1.5rem);
+  }
+}

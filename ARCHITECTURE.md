@@ -65,6 +65,7 @@ browser or the Windows Companion's WebView2 and talking WebRTC directly to LiveK
 | `SettingsMenu.tsx`                                  | In-room settings drawer (Media / Recording tabs). Gated by `NEXT_PUBLIC_SHOW_SETTINGS_MENU`.                                                                               |
 | `CustomVideoConference.tsx`                         | Conference layout with participant volume controls, custom chat, and the watch-together cinema stage.                                                                      |
 | `companionNavigation.ts` / `CompanionRouteGate.tsx` | Browser-side, strictly loopback Companion probe and pre-room native handoff; keeps the browser client unmounted once an `open-room` command has been sent.                 |
+| `CompanionUpdatePrompt.tsx` / `companionVersion.ts` | Compares the installed desktop semver with the version shipped by the site and offers the rolling installer when the desktop client is older.                              |
 | `watchTogether/**`                                  | Cinema source picker, synchronized URL/HLS/YouTube/VK players, and host-side local-file/torrent publication through LiveKit screen-share tracks.                           |
 | `CameraSettings.tsx`                                | Camera device + background effects (blur / virtual background via `@livekit/track-processors`).                                                                            |
 | `MicrophoneSettings.tsx`                            | Mic device + Krisp enhanced noise cancellation (auto-on for non-low-power devices).                                                                                        |
@@ -228,9 +229,11 @@ both modes viewers do not join the swarm: LiveKit receives and forwards only the
 captured encoded media tracks.
 
 The home page and the room's always-visible top toolbar link to
-`/api/companion/download`. The route
-redirects to `LiveKitCompanionSetup.exe` in a rolling GitHub Release, so the Next.js
-server does not build or store binaries. A Windows GitHub Actions job packages Node.js,
+`/api/companion/download`. The route redirects to `LiveKitCompanionSetup.exe` in a rolling
+GitHub Release, so the Next.js server does not build or store binaries. Inside the desktop
+client, the root layout compares its injected `appVersion` with `companion/package.json` and
+offers that installer when the site version is newer; legacy clients without `appVersion`
+also receive the one-time-per-session offer. A Windows GitHub Actions job packages Node.js,
 the companion, its dependencies, shortcuts, and autostart support with Inno Setup. The
 same job builds the user-facing `LiveKitCompanion.exe` launcher and the internal
 `LiveKitCompanionNative.exe` key/tray helper from repository C# source. The launcher is
@@ -257,9 +260,9 @@ Remote client addresses must use HTTPS; HTTP is accepted only for loopback devel
 If no client URL is configured, or the configured page cannot load, the launcher falls
 back to localhost Settings. WebView2 top-level navigation is restricted to the exact
 configured app origin and the Settings origin. Media permissions and screen capture are
-denied outside the app origin. A frozen versioned marker,
-`window.__LIVEKIT_COMPANION__ = { host: 'webview2', platform: 'windows', version: 1 }`,
-lets the web UI hide its installer link without granting the remote page access to the
+denied outside the app origin. A frozen `window.__LIVEKIT_COMPANION__` marker identifies the
+WebView2 host with protocol `version: 1` and exposes the installed `appVersion: '<semver>'`.
+This lets the web UI compare versions without granting the remote page access to the
 localhost Settings token.
 
 Room entry has a browser-to-native handoff before either LiveKit client mounts. The

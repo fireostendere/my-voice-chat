@@ -1,20 +1,13 @@
 import { getCompanionNavigationWsUrl } from './companion';
+import { isCompanionWebView } from './companionMarker';
+
+export { isCompanionWebView } from './companionMarker';
 
 // A cold WebView2 profile may need up to a minute for runtime creation and the
 // initial page load. Keep this above the native and Node IPC deadlines so the
 // browser does not cancel a handoff that is still legitimately starting.
 const OPEN_ROOM_TIMEOUT_MS = 130_000;
 const COMPANION_HANDSHAKE_TIMEOUT_MS = 10_000;
-
-type CompanionMarker = {
-  host: 'webview2';
-  platform: 'windows';
-  version: 1;
-};
-
-type CompanionWindow = Window & {
-  __LIVEKIT_COMPANION__?: true | CompanionMarker;
-};
 
 type WebSocketConstructor = new (url: string | URL, protocols?: string | string[]) => WebSocket;
 
@@ -25,18 +18,6 @@ export type OpenRoomInCompanionOptions = {
 };
 
 export type CompanionHandoffResult = 'unavailable' | 'accepted' | 'relinquished';
-
-export function isCompanionWebView(): boolean {
-  if (typeof window === 'undefined') return false;
-  const marker = (window as CompanionWindow).__LIVEKIT_COMPANION__;
-  return (
-    typeof marker === 'object' &&
-    marker !== null &&
-    marker.host === 'webview2' &&
-    marker.platform === 'windows' &&
-    marker.version === 1
-  );
-}
 
 export function openRoomInCompanion(
   targetUrl: string,
