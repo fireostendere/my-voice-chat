@@ -13,8 +13,20 @@ class TorrentService {
     this.operation = Promise.resolve();
   }
 
-  attachSocket(socket, { enableTorrent = true } = {}) {
-    this.sendHello(socket, enableTorrent);
+  attachSocket(socket, { enableTorrent = true, extraCapabilities = [] } = {}) {
+    const resolvedCapabilities = Array.isArray(extraCapabilities)
+      ? extraCapabilities
+      : Promise.resolve(extraCapabilities)
+          .then((value) => (Array.isArray(value) ? value : []))
+          .catch(() => []);
+    const sendCapabilities = () => {
+      if (Array.isArray(resolvedCapabilities)) {
+        this.sendHello(socket, enableTorrent, resolvedCapabilities);
+      } else {
+        void resolvedCapabilities.then((value) => this.sendHello(socket, enableTorrent, value));
+      }
+    };
+    sendCapabilities();
     socket.on('message', (raw) => {
       let message;
       try {
@@ -23,7 +35,7 @@ class TorrentService {
         return;
       }
       if (message.type === 'capabilities') {
-        this.sendHello(socket, enableTorrent);
+        sendCapabilities();
       } else if (message.type === 'torrent-start' && enableTorrent) {
         this.operation = this.operation
           .then(() => this.start(socket, message))
@@ -43,11 +55,17 @@ class TorrentService {
     });
   }
 
-  sendHello(socket, enableTorrent = true) {
+  sendHello(socket, enableTorrent = true, extraCapabilities = []) {
+    const capabilities = enableTorrent ? ['ptt', 'torrent'] : ['ptt'];
+    for (const capability of extraCapabilities) {
+      if (typeof capability === 'string' && !capabilities.includes(capability)) {
+        capabilities.push(capability);
+      }
+    }
     this.send(socket, {
       type: 'hello',
-      version: 2,
-      capabilities: enableTorrent ? ['ptt', 'torrent'] : ['ptt'],
+      version: 3,
+      capabilities,
     });
   }
 
@@ -112,7 +130,11 @@ class TorrentService {
     if (this.active !== active) return;
     const selected = selectLargestVideoFile(torrent.files);
     if (!selected) {
-      this.sendError(active.owner, active.requestId, new Error('The torrent contains no video file.'));
+      this.sendError(
+        active.owner,
+        active.requestId,
+        new Error('The torrent contains no video file.'),
+      );
       this.operation = this.operation.then(() => this.stop());
       return;
     }

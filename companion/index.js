@@ -29,6 +29,7 @@ installFileLogger(process.env.COMPANION_LOG_FILE);
 const { WebSocketServer } = require('ws');
 const { createFileClientConfig, normalizeWebAppUrl } = require('./client-config');
 const { CompanionUiServer } = require('./companion-ui');
+const { NativeNavigationService } = require('./native-navigation-service');
 const { companionDataDir, createFileOriginApprover } = require('./origin-approval');
 const { PttKeyListener, SUPPORTED_KEYS, normalizePttKey } = require('./ptt-key-listener');
 const { RoomRegistry } = require('./room-registry');
@@ -57,6 +58,11 @@ const ICON_PATH = fs.existsSync(PACKAGED_ICON_PATH)
 const clientConfig = createFileClientConfig({
   configuredUrl: process.env.COMPANION_WEB_APP_URL,
   dataDir: DATA_DIR,
+});
+const navigationService = new NativeNavigationService({
+  uiPort: UI_PORT,
+  launcherPath: process.env.COMPANION_LAUNCHER_PATH,
+  getWebAppUrl: () => clientConfig.getWebAppUrl(),
 });
 claimProcess();
 const originApprover = createFileOriginApprover({ configuredOrigins: ALLOWED_ORIGINS });
@@ -109,7 +115,8 @@ wss.on('listening', () => {
 wss.on('connection', (socket, req) => {
   const origin = req.headers.origin;
   console.log(`[companion] browser connected: ${origin}`);
-  torrentService.attachSocket(socket, { enableTorrent: true });
+  const extraCapabilities = navigationService.attachSocket(socket, { origin });
+  torrentService.attachSocket(socket, { enableTorrent: true, extraCapabilities });
   roomRegistry.attachSocket(socket);
 });
 wss.on('error', (err) => {

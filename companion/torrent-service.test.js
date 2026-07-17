@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TorrentService } from './torrent-service.js';
 
 class FakeSocket extends EventEmitter {
@@ -19,7 +19,7 @@ describe('TorrentService capability handshake', () => {
     const service = new TorrentService({ port: 7332 });
     const socket = new FakeSocket();
     service.attachSocket(socket);
-    expect(socket.sent).toEqual([{ type: 'hello', version: 2, capabilities: ['ptt', 'torrent'] }]);
+    expect(socket.sent).toEqual([{ type: 'hello', version: 3, capabilities: ['ptt', 'torrent'] }]);
   });
 
   it('answers an explicit capabilities request', () => {
@@ -46,5 +46,38 @@ describe('TorrentService capability handshake', () => {
       }),
     );
     expect(service.active).toBeNull();
+  });
+
+  it('includes optional capabilities without duplicates', () => {
+    const service = new TorrentService({ port: 7332 });
+    const socket = new FakeSocket();
+    service.attachSocket(socket, {
+      extraCapabilities: ['open-room', 'ptt', 'open-room'],
+    });
+
+    expect(socket.sent[0]).toEqual({
+      type: 'hello',
+      version: 3,
+      capabilities: ['ptt', 'torrent', 'open-room'],
+    });
+
+    socket.emit('message', JSON.stringify({ type: 'capabilities' }));
+    expect(socket.sent[1]).toEqual(socket.sent[0]);
+  });
+
+  it('waits for asynchronously selected capabilities without losing the socket listener', async () => {
+    const service = new TorrentService({ port: 7332 });
+    const socket = new FakeSocket();
+    let resolveCapabilities;
+    const extraCapabilities = new Promise((resolve) => {
+      resolveCapabilities = resolve;
+    });
+    service.attachSocket(socket, { extraCapabilities });
+    socket.emit('message', JSON.stringify({ type: 'capabilities' }));
+
+    expect(socket.sent).toEqual([]);
+    resolveCapabilities(['open-room']);
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(2));
+    expect(socket.sent[0].capabilities).toEqual(['ptt', 'torrent', 'open-room']);
   });
 });
