@@ -4,6 +4,17 @@ const http = require('node:http');
 
 const DEFAULT_PORT = 7340;
 const port = parsePort(process.argv[2] || process.env.COMPANION_SMOKE_PORT || DEFAULT_PORT);
+const TARGET_PATH = '/rooms/native-handoff-smoke';
+const TARGET_SEARCH = '?codec=vp9&handoff=1';
+const TARGET_HASH = '#handoff-secret';
+const TARGET_URL = `http://127.0.0.1:${port}${TARGET_PATH}${TARGET_SEARCH}${TARGET_HASH}`;
+const smokeState = {
+  status: 'pending',
+  message: 'Waiting for the external native handoff smoke client.',
+  expectedUrl: TARGET_URL,
+  observedUrl: null,
+};
+let targetRequestSeen = false;
 
 const html = `<!doctype html>
 <html lang="en">
@@ -25,12 +36,19 @@ const html = `<!doctype html>
 
       const status = document.querySelector('#status');
 
-      run().catch((error) => {
+      run().catch((error) => void failSmoke(error));
+
+      async function failSmoke(error) {
         const message = error instanceof Error ? error.message : String(error);
         document.title = 'LiveKit Companion WebView Smoke FAILED';
         document.documentElement.dataset.smokeStatus = 'failed';
         status.textContent = message;
-      });
+        try {
+          await reportSmokeResult({ status: 'failed', message });
+        } catch (reportError) {
+          status.textContent += '\\nCould not report the failure: ' + String(reportError);
+        }
+      }
 
       async function run() {
         assert(window.isSecureContext, 'The fixture is not a secure context.');
@@ -79,9 +97,13 @@ const html = `<!doctype html>
         }
 
         const hello = await companionHello();
-        assert(hello.version === 2, 'The companion protocol version is not 2.');
+        assert(hello.version === 3, 'The companion protocol version is not 3.');
         assert(hello.capabilities.includes('ptt'), 'The companion did not advertise PTT.');
         assert(hello.capabilities.includes('torrent'), 'The companion did not advertise torrent.');
+        assert(
+          hello.capabilities.includes('open-room'),
+          'The companion did not advertise native room handoff.',
+        );
 
         window.__companionSmoke = {
           capabilities: hello.capabilities,
@@ -89,9 +111,38 @@ const html = `<!doctype html>
           nativeHost: window.__LIVEKIT_COMPANION__,
           secureContext: window.isSecureContext,
         };
+
+        if (window.location.pathname !== ${JSON.stringify(TARGET_PATH)}) {
+          status.textContent =
+            'Browser capabilities passed. Waiting for the external native handoff request…';
+          return;
+        }
+
+        assert(
+          window.location.search === ${JSON.stringify(TARGET_SEARCH)},
+          'The native handoff lost the room query string.',
+        );
+        assert(
+          window.location.hash === ${JSON.stringify(TARGET_HASH)},
+          'The native handoff lost the room fragment.',
+        );
+        assert(
+          window.location.href === ${JSON.stringify(TARGET_URL)},
+          'The native handoff loaded an unexpected room URL.',
+        );
+        await reportSmokeResult({ status: 'passed', url: window.location.href });
         document.documentElement.dataset.smokeStatus = 'ok';
-        status.textContent = JSON.stringify(window.__companionSmoke, null, 2);
+        status.textContent = 'Native cold-start handoff preserved path, query, and hash.';
         document.title = 'LiveKit Companion WebView Smoke OK';
+      }
+
+      async function reportSmokeResult(payload) {
+        const response = await fetch('/smoke-result', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) throw new Error('The smoke fixture rejected the browser result.');
       }
 
       function companionHello() {
@@ -144,7 +195,22 @@ const server = http.createServer((request, response) => {
     send(response, 200, 'ok\n', 'text/plain; charset=utf-8');
     return;
   }
-  if (request.method === 'GET' && url.pathname === '/') {
+  if (request.method === 'GET' && url.pathname === '/smoke-status') {
+    sendJson(response, 200, smokeState);
+    return;
+  }
+  if (request.method === 'POST' && url.pathname === '/smoke-result') {
+    receiveSmokeResult(request, response);
+    return;
+  }
+  if (request.method === 'GET' && (url.pathname === '/' || url.pathname === TARGET_PATH)) {
+    if (url.pathname === TARGET_PATH) {
+      if (url.search === TARGET_SEARCH) {
+        targetRequestSeen = true;
+      } else {
+        recordFailure(`The native handoff requested an unexpected query string: ${url.search}`);
+      }
+    }
     send(response, 200, html, 'text/html; charset=utf-8');
     return;
   }
@@ -174,11 +240,74 @@ function send(response, statusCode, body, contentType) {
   response.end(body);
 }
 
+function sendJson(response, statusCode, value) {
+  send(response, statusCode, `${JSON.stringify(value)}\n`, 'application/json; charset=utf-8');
+}
+
+function receiveSmokeResult(request, response) {
+  let body = '';
+  let tooLarge = false;
+  request.setEncoding('utf8');
+  request.on('data', (chunk) => {
+    if (tooLarge) return;
+    body += chunk;
+    if (Buffer.byteLength(body, 'utf8') > 8192) {
+      tooLarge = true;
+      body = '';
+    }
+  });
+  request.on('end', () => {
+    if (tooLarge) {
+      recordFailure('The browser smoke result was too large.');
+      sendJson(response, 413, smokeState);
+      return;
+    }
+
+    let result;
+    try {
+      result = JSON.parse(body);
+    } catch {
+      recordFailure('The browser smoke result was not valid JSON.');
+      sendJson(response, 400, smokeState);
+      return;
+    }
+
+    if (result?.status === 'failed') {
+      recordFailure(normalizeMessage(result.message));
+    } else if (result?.status === 'passed' && targetRequestSeen && result.url === TARGET_URL) {
+      if (smokeState.status !== 'failed') {
+        smokeState.status = 'passed';
+        smokeState.message = 'The native room target loaded with its exact path, query, and hash.';
+        smokeState.observedUrl = result.url;
+      }
+    } else {
+      recordFailure('The browser reported an invalid native handoff result.');
+    }
+    sendJson(response, smokeState.status === 'failed' ? 400 : 200, smokeState);
+  });
+  request.on('error', (error) => {
+    recordFailure(`Could not read the browser smoke result: ${error.message}`);
+    if (!response.headersSent) sendJson(response, 400, smokeState);
+  });
+}
+
+function recordFailure(message) {
+  if (smokeState.status === 'failed') return;
+  smokeState.status = 'failed';
+  smokeState.message = message;
+}
+
+function normalizeMessage(value) {
+  if (typeof value !== 'string') return 'The WebView smoke page reported a failure.';
+  const message = value.trim();
+  return message ? message.slice(0, 1024) : 'The WebView smoke page reported a failure.';
+}
+
 function commonHeaders() {
   return {
     'Cache-Control': 'no-store',
     'Content-Security-Policy':
-      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src ws://127.0.0.1:7331; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:7331; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
     'Cross-Origin-Embedder-Policy': 'credentialless',
     'Cross-Origin-Opener-Policy': 'same-origin',
     'Origin-Agent-Cluster': '?1',

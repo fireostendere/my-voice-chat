@@ -108,7 +108,7 @@ jobs:
           "$checksum  LiveKitCompanionSetup.exe" |
             Set-Content 'companion/dist/LiveKitCompanionSetup.exe.sha256' -Encoding ascii
 
-      - name: Smoke test installed WebView2 client, startup, and uninstaller
+      - name: Smoke test installed WebView2 room handoff, startup, and uninstaller
         shell: pwsh
         run: |
           function Wait-ProcessOrThrow {
@@ -152,8 +152,11 @@ jobs:
           $fixturePort = 7340
           $fixtureUrl = "http://127.0.0.1:$fixturePort/"
           $fixtureScript = (Resolve-Path 'companion/scripts/webview-smoke-server.js').Path
+          $handoffScript = (Resolve-Path 'companion/scripts/native-handoff-smoke-client.js').Path
           $fixtureLog = Join-Path $env:RUNNER_TEMP 'webview-smoke-fixture.log'
           $fixtureErrorLog = Join-Path $env:RUNNER_TEMP 'webview-smoke-fixture-error.log'
+          $handoffLog = Join-Path $env:RUNNER_TEMP 'native-handoff-smoke.log'
+          $handoffErrorLog = Join-Path $env:RUNNER_TEMP 'native-handoff-smoke-error.log'
           $fixture = Start-Process (Get-Command node).Source `
             -ArgumentList $fixtureScript, $fixturePort `
             -RedirectStandardOutput $fixtureLog `
@@ -181,7 +184,9 @@ jobs:
             }
 
             $previousWebAppUrl = $env:COMPANION_WEB_APP_URL
+            $previousSmokeExpectedTitle = $env:COMPANION_SMOKE_EXPECTED_TITLE
             $env:COMPANION_WEB_APP_URL = $fixtureUrl
+            $env:COMPANION_SMOKE_EXPECTED_TITLE = 'LiveKit Companion WebView Smoke OK'
             try {
               $start = Start-Process $app -ArgumentList '--startup' -PassThru
             } finally {
@@ -189,6 +194,11 @@ jobs:
                 Remove-Item Env:COMPANION_WEB_APP_URL -ErrorAction SilentlyContinue
               } else {
                 $env:COMPANION_WEB_APP_URL = $previousWebAppUrl
+              }
+              if ($null -eq $previousSmokeExpectedTitle) {
+                Remove-Item Env:COMPANION_SMOKE_EXPECTED_TITLE -ErrorAction SilentlyContinue
+              } else {
+                $env:COMPANION_SMOKE_EXPECTED_TITLE = $previousSmokeExpectedTitle
               }
             }
             try {
@@ -221,17 +231,37 @@ jobs:
               Where-Object { $_.ExecutablePath -like "$installDir*" }
             if (-not $helper) { throw 'Native PTT and tray helper is not running.' }
 
-            $env:COMPANION_SMOKE_EXPECTED_TITLE = 'LiveKit Companion WebView Smoke OK'
+            $existingWindow = Get-CimInstance Win32_Process -Filter "Name = 'LiveKitCompanion.exe'" |
+              Where-Object { $_.ExecutablePath -like "$installDir*" }
+            if ($existingWindow) {
+              throw 'A native Companion window was already running before the cold handoff smoke test.'
+            }
+
             try {
-              $windowSmoke = Start-Process $app -ArgumentList '--window-smoke-test' -PassThru
-              Wait-ProcessOrThrow $windowSmoke 45 'Native Companion web client'
+              $handoffSmoke = Start-Process (Get-Command node).Source `
+                -ArgumentList $handoffScript, $fixtureUrl `
+                -RedirectStandardOutput $handoffLog `
+                -RedirectStandardError $handoffErrorLog `
+                -NoNewWindow `
+                -PassThru
+              Wait-ProcessOrThrow $handoffSmoke 180 'Native Companion cold room handoff'
+              $windowDeadline = (Get-Date).AddSeconds(30)
+              do {
+                $spawnedWindow = Get-CimInstance Win32_Process -Filter "Name = 'LiveKitCompanion.exe'" |
+                  Where-Object { $_.ExecutablePath -like "$installDir*" }
+                if (-not $spawnedWindow) { break }
+                Start-Sleep -Milliseconds 200
+              } while ((Get-Date) -lt $windowDeadline)
+              if ($spawnedWindow) {
+                throw 'The spawned native Companion smoke window did not close after loading the room.'
+              }
             } catch {
               if (Test-Path $logFile) { Get-Content $logFile }
               if (Test-Path $fixtureLog) { Get-Content $fixtureLog }
               if (Test-Path $fixtureErrorLog) { Get-Content $fixtureErrorLog }
+              if (Test-Path $handoffLog) { Get-Content $handoffLog }
+              if (Test-Path $handoffErrorLog) { Get-Content $handoffErrorLog }
               throw
-            } finally {
-              Remove-Item Env:COMPANION_SMOKE_EXPECTED_TITLE -ErrorAction SilentlyContinue
             }
           } finally {
             if ($fixture -and -not $fixture.HasExited) {
@@ -273,6 +303,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if ! gh release view companion-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release create companion-latest --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "LiveKit Companion" --notes "Full Windows WebView2 voice-chat client with local push-to-talk and BitTorrent bridge." --latest
+            gh release create companion-latest --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "LiveKit Companion" --notes "Full Windows WebView2 voice-chat client with automatic room handoff, local push-to-talk, and BitTorrent bridge." --latest
           fi
           gh release upload companion-latest LiveKitCompanionSetup.exe LiveKitCompanionSetup.exe.sha256 --repo "$GITHUB_REPOSITORY" --clobber

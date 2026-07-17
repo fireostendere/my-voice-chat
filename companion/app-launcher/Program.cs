@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Drawing;
+using System.IO.Pipes;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -13,7 +15,9 @@ internal static class Program
     private const uint ErrorMessage = 0x00000010 | 0x00010000;
     private const uint WindowClose = 0x0010;
     private const string WebAppEnvironmentVariable = "COMPANION_WEB_APP_URL";
-    private static readonly string UiUrl = $"http://127.0.0.1:{ResolveUiPort()}/";
+    private static readonly int UiPort = ResolveUiPort();
+    private static readonly string UiUrl = $"http://127.0.0.1:{UiPort}/";
+    private static readonly string NavigationPipeName = $"LiveKitCompanion.Navigation.{UiPort}";
     private static readonly string InstallDirectory = AppContext.BaseDirectory;
     private static readonly string DataDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -41,7 +45,10 @@ internal static class Program
         }
 
         var openWindow = command != "--startup";
-        var smokeWindow = command == "--window-smoke-test";
+        var smokeWindow = command == "--window-smoke-test" ||
+            (command == "--open" &&
+             !string.IsNullOrWhiteSpace(
+                 Environment.GetEnvironmentVariable("COMPANION_SMOKE_EXPECTED_TITLE")));
         try
         {
             using var mutex = new Mutex(false, @"Local\LiveKitCompanion.Launcher");
@@ -111,6 +118,12 @@ internal static class Program
         startInfo.ArgumentList.Add(entryPoint);
         startInfo.Environment["COMPANION_LOG_FILE"] = LogFile;
         startInfo.Environment["COMPANION_PACKAGED"] = "1";
+        startInfo.Environment["COMPANION_UI_PORT"] = UiPort.ToString();
+        startInfo.Environment["COMPANION_NAVIGATION_PIPE_NAME"] = NavigationPipeName;
+        if (Environment.ProcessPath is { } launcherPath)
+        {
+            startInfo.Environment["COMPANION_LAUNCHER_PATH"] = launcherPath;
+        }
         if (Environment.GetEnvironmentVariable(WebAppEnvironmentVariable) is null &&
             !string.IsNullOrWhiteSpace(PackagedWebAppUrl))
         {
@@ -162,10 +175,14 @@ internal static class Program
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            using var window = new CompanionWindow(UiUrl, DataDirectory, smokeTest);
+            using var window = new CompanionWindow(
+                UiUrl,
+                DataDirectory,
+                smokeTest,
+                NavigationPipeName);
             Application.Run(window);
             if (!window.InitializationFailed) return 0;
-            ReportStartupError(window.FailureReason ?? "The control window could not start.", false);
+            ReportStartupError(window.FailureReason ?? "The client window could not start.", false);
             return 1;
         }
         finally
@@ -344,7 +361,7 @@ internal static class Program
     private static extern bool ShowWindow(nint window, int command);
 
     [DllImport("user32.dll")]
-    private static extern bool SetForegroundWindow(nint window);
+    internal static extern bool SetForegroundWindow(nint window);
 
     [DllImport("user32.dll")]
     private static extern bool PostMessageW(nint window, uint message, nuint word, nint parameter);
@@ -353,11 +370,15 @@ internal static class Program
 internal sealed class CompanionWindow : Form
 {
     private const string SmokeExpectedTitleVariable = "COMPANION_SMOKE_EXPECTED_TITLE";
+    private const int MaxNavigationRequestBytes = 16 * 1024;
+    private const int MaxNavigationUrlCharacters = 8192;
     private const string FakeMediaArguments =
         "--use-fake-ui-for-media-stream --use-fake-device-for-media-stream";
+    private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     private readonly Uri uiUri;
     private readonly Uri clientConfigUri;
+    private readonly string? navigationPipeName;
     private readonly bool smokeTest;
     private readonly string? smokeExpectedTitle;
     private readonly WebView2 browser;
@@ -376,7 +397,12 @@ internal sealed class CompanionWindow : Form
         Timeout = TimeSpan.FromSeconds(3),
     };
     private readonly System.Windows.Forms.Timer healthTimer = new() { Interval = 1500 };
+    private readonly TaskCompletionSource<bool> browserReadyCompletion = new(
+        TaskCreationOptions.RunContinuationsAsynchronously);
     private Uri? webAppUri;
+    private CancellationTokenSource? navigationPipeCancellation;
+    private Task? navigationPipeTask;
+    private bool browserReady;
     private bool checkingHealth;
     private bool openingClient;
     private int failedHealthChecks;
@@ -384,10 +410,15 @@ internal sealed class CompanionWindow : Form
     internal bool InitializationFailed { get; private set; }
     internal string? FailureReason { get; private set; }
 
-    internal CompanionWindow(string uiUrl, string dataDirectory, bool smokeTest)
+    internal CompanionWindow(
+        string uiUrl,
+        string dataDirectory,
+        bool smokeTest,
+        string? navigationPipeName)
     {
         uiUri = new Uri(uiUrl);
         clientConfigUri = new Uri(uiUri, "api/client-config");
+        this.navigationPipeName = navigationPipeName;
         this.smokeTest = smokeTest;
         smokeExpectedTitle = smokeTest
             ? NullIfWhiteSpace(Environment.GetEnvironmentVariable(SmokeExpectedTitleVariable))
@@ -448,10 +479,17 @@ internal sealed class CompanionWindow : Form
         homeButton.Click += async (_, _) => await OpenClientFromConfig(showErrors: true);
         settingsButton.Click += (_, _) => NavigateInWindow(uiUri);
         reloadButton.Click += (_, _) => browser.CoreWebView2?.Reload();
-        Shown += async (_, _) => await InitializeBrowser();
+        Shown += async (_, _) =>
+        {
+            StartNavigationPipe();
+            await InitializeBrowser();
+        };
         healthTimer.Tick += async (_, _) => await CheckServiceHealth();
         FormClosed += (_, _) =>
         {
+            browserReady = false;
+            browserReadyCompletion.TrySetCanceled();
+            StopNavigationPipe();
             healthTimer.Stop();
             healthTimer.Dispose();
             healthClient.Dispose();
@@ -553,6 +591,8 @@ internal sealed class CompanionWindow : Form
             homeButton.Enabled = true;
             settingsButton.Enabled = true;
             reloadButton.Enabled = true;
+            browserReady = true;
+            browserReadyCompletion.TrySetResult(true);
             healthTimer.Start();
             if (smokeTest)
             {
@@ -569,6 +609,7 @@ internal sealed class CompanionWindow : Form
         }
         catch (Exception error)
         {
+            browserReadyCompletion.TrySetCanceled();
             InitializationFailed = true;
             FailureReason = $"Could not create the Companion window: {error.Message}";
             if (!smokeTest)
@@ -582,6 +623,397 @@ internal sealed class CompanionWindow : Form
             }
             Close();
         }
+    }
+
+    private void StartNavigationPipe()
+    {
+        if (navigationPipeName is null || navigationPipeTask is not null || IsDisposed) return;
+        navigationPipeCancellation = new CancellationTokenSource();
+        var cancellationToken = navigationPipeCancellation.Token;
+        navigationPipeTask = Task.Run(
+            () => ListenForNavigationRequestsAsync(navigationPipeName, cancellationToken),
+            cancellationToken);
+    }
+
+    private void StopNavigationPipe()
+    {
+        var cancellation = navigationPipeCancellation;
+        var task = navigationPipeTask;
+        navigationPipeCancellation = null;
+        navigationPipeTask = null;
+        if (cancellation is null) return;
+
+        cancellation.Cancel();
+        if (task is null)
+        {
+            cancellation.Dispose();
+            return;
+        }
+        _ = task.ContinueWith(
+            _ => cancellation.Dispose(),
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    private async Task ListenForNavigationRequestsAsync(
+        string pipeName,
+        CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                using var pipe = new NamedPipeServerStream(
+                    pipeName,
+                    PipeDirection.InOut,
+                    1,
+                    PipeTransmissionMode.Byte,
+                    PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly,
+                    MaxNavigationRequestBytes,
+                    1024);
+                await pipe.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
+                await HandleNavigationPipeClientAsync(pipe, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch
+            {
+                try
+                {
+                    await Task.Delay(200, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+        }
+    }
+
+    private async Task HandleNavigationPipeClientAsync(
+        NamedPipeServerStream pipe,
+        CancellationToken cancellationToken)
+    {
+        using var requestTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        // First-run WebView2 setup can consume the 20s runtime deadline, both
+        // initial 20s navigation attempts, and the room navigation itself.
+        // Finish before Node's 110s IPC deadline.
+        requestTimeout.CancelAfter(TimeSpan.FromSeconds(100));
+        var requestToken = requestTimeout.Token;
+        NavigationPipeResponse response;
+        try
+        {
+            var line = await ReadNavigationLineAsync(pipe, requestToken).ConfigureAwait(false);
+            var request = ParseNavigationRequest(line);
+            using var navigationCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(requestToken);
+            using var disconnectMonitorCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var disconnectMonitor = CancelNavigationOnDisconnectAsync(
+                pipe,
+                navigationCancellation,
+                disconnectMonitorCancellation.Token);
+            try
+            {
+                response = await DispatchNavigationAsync(
+                    request.Url,
+                    navigationCancellation.Token).ConfigureAwait(false);
+            }
+            finally
+            {
+                disconnectMonitorCancellation.Cancel();
+                await disconnectMonitor.ConfigureAwait(false);
+            }
+        }
+        catch (InvalidDataException error)
+        {
+            response = new NavigationPipeResponse(false, error.Message);
+        }
+        catch (JsonException)
+        {
+            response = new NavigationPipeResponse(false, "The navigation request is not valid JSON.");
+        }
+        catch (DecoderFallbackException)
+        {
+            response = new NavigationPipeResponse(false, "The navigation request is not valid UTF-8.");
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            response = new NavigationPipeResponse(false, "The navigation request timed out.");
+        }
+
+        try
+        {
+            await WriteNavigationResponseAsync(pipe, response, cancellationToken).ConfigureAwait(false);
+        }
+        catch when (!cancellationToken.IsCancellationRequested)
+        {
+            // A client may disconnect before reading its response. Keep accepting new clients.
+        }
+    }
+
+    private static async Task CancelNavigationOnDisconnectAsync(
+        Stream stream,
+        CancellationTokenSource navigationCancellation,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var unexpectedInput = new byte[1];
+            await stream.ReadAsync(unexpectedInput, cancellationToken).ConfigureAwait(false);
+            navigationCancellation.Cancel();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The navigation completed while the browser-side request was still connected.
+        }
+        catch
+        {
+            navigationCancellation.Cancel();
+        }
+    }
+
+    private static async Task<string> ReadNavigationLineAsync(
+        Stream stream,
+        CancellationToken cancellationToken)
+    {
+        using var body = new MemoryStream();
+        var buffer = new byte[1024];
+        while (true)
+        {
+            var bytesRead = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+            if (bytesRead == 0)
+            {
+                throw new InvalidDataException("The navigation request ended before its newline.");
+            }
+
+            var newline = Array.IndexOf(buffer, (byte)'\n', 0, bytesRead);
+            var payloadBytes = newline >= 0 ? newline : bytesRead;
+            if (body.Length + payloadBytes > MaxNavigationRequestBytes)
+            {
+                throw new InvalidDataException("The navigation request is too large.");
+            }
+            body.Write(buffer, 0, payloadBytes);
+            if (newline < 0) continue;
+
+            var payload = body.ToArray();
+            var payloadLength = payload.Length;
+            if (payloadLength > 0 && payload[payloadLength - 1] == '\r') payloadLength--;
+            return StrictUtf8.GetString(payload, 0, payloadLength);
+        }
+    }
+
+    private static NavigationPipeRequest ParseNavigationRequest(string value)
+    {
+        using var document = JsonDocument.Parse(
+            value,
+            new JsonDocumentOptions
+            {
+                AllowTrailingCommas = false,
+                CommentHandling = JsonCommentHandling.Disallow,
+                MaxDepth = 8,
+            });
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidDataException("The navigation request must be a JSON object.");
+        }
+
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var property in root.EnumerateObject())
+        {
+            if (!names.Add(property.Name) ||
+                property.Name is not ("version" or "requestId" or "url"))
+            {
+                throw new InvalidDataException("The navigation request has unsupported fields.");
+            }
+        }
+        if (names.Count != 3 ||
+            !root.TryGetProperty("version", out var version) ||
+            version.ValueKind != JsonValueKind.Number ||
+            !version.TryGetInt32(out var protocolVersion) ||
+            protocolVersion != 1)
+        {
+            throw new InvalidDataException("The navigation protocol version is unsupported.");
+        }
+        if (!root.TryGetProperty("requestId", out var requestIdValue) ||
+            requestIdValue.ValueKind != JsonValueKind.String ||
+            requestIdValue.GetString() is not { } requestId ||
+            string.IsNullOrWhiteSpace(requestId) ||
+            requestId.Length > 128)
+        {
+            throw new InvalidDataException("The navigation requestId is invalid.");
+        }
+        if (!root.TryGetProperty("url", out var urlValue) ||
+            urlValue.ValueKind != JsonValueKind.String ||
+            urlValue.GetString() is not { } url ||
+            string.IsNullOrWhiteSpace(url) ||
+            url.Length > MaxNavigationUrlCharacters ||
+            url != url.Trim())
+        {
+            throw new InvalidDataException("The navigation URL is invalid.");
+        }
+        return new NavigationPipeRequest(url);
+    }
+
+    private Task<NavigationPipeResponse> DispatchNavigationAsync(
+        string value,
+        CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested || IsDisposed || !IsHandleCreated)
+        {
+            return Task.FromResult(
+                new NavigationPipeResponse(false, "The Companion window is not available."));
+        }
+
+        var completion = new TaskCompletionSource<NavigationPipeResponse>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            BeginInvoke(new Action(async () =>
+            {
+                if (cancellationToken.IsCancellationRequested || IsDisposed)
+                {
+                    completion.TrySetResult(
+                        new NavigationPipeResponse(false, "The Companion window is not available."));
+                    return;
+                }
+                try
+                {
+                    completion.TrySetResult(
+                        await NavigateFromPipeAsync(value, cancellationToken));
+                }
+                catch
+                {
+                    completion.TrySetResult(
+                        new NavigationPipeResponse(false, "The Companion could not open the room."));
+                }
+            }));
+        }
+        catch (InvalidOperationException)
+        {
+            completion.TrySetResult(
+                new NavigationPipeResponse(false, "The Companion window is not available."));
+        }
+        return completion.Task.WaitAsync(cancellationToken);
+    }
+
+    private async Task<NavigationPipeResponse> NavigateFromPipeAsync(
+        string value,
+        CancellationToken cancellationToken)
+    {
+        if (!TryParseNavigationUri(value, out var destination, out var validationError))
+        {
+            return new NavigationPipeResponse(false, validationError);
+        }
+
+        if (!browserReady)
+        {
+            await browserReadyCompletion.Task.WaitAsync(cancellationToken);
+        }
+        if (!browserReady || IsDisposed || browser.CoreWebView2 is null)
+        {
+            return new NavigationPipeResponse(false, "The Companion window is not available.");
+        }
+
+        try
+        {
+            await GetClientDestination(strict: true);
+        }
+        catch
+        {
+            return new NavigationPipeResponse(false, "The Companion client configuration is unavailable.");
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        if (webAppUri is null || !IsSameOrigin(destination, webAppUri))
+        {
+            return new NavigationPipeResponse(false, "The room URL does not match the configured app origin.");
+        }
+        if (cancellationToken.IsCancellationRequested ||
+            !browserReady || IsDisposed || browser.CoreWebView2 is null)
+        {
+            return new NavigationPipeResponse(false, "The Companion window is not available.");
+        }
+
+        CoreWebView2NavigationCompletedEventArgs result;
+        try
+        {
+            result = await NavigateAndWait(
+                destination,
+                TimeSpan.FromSeconds(20),
+                cancellationToken);
+        }
+        catch (TimeoutException)
+        {
+            return new NavigationPipeResponse(false, "The room page did not load in time.");
+        }
+        if (!result.IsSuccess)
+        {
+            return new NavigationPipeResponse(
+                false,
+                $"The room page failed to load ({result.WebErrorStatus}).");
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        RestoreAndForeground();
+        return new NavigationPipeResponse(true);
+    }
+
+    private static bool TryParseNavigationUri(
+        string value,
+        out Uri destination,
+        out string validationError)
+    {
+        destination = null!;
+        if (value.Length is < 1 or > MaxNavigationUrlCharacters ||
+            value != value.Trim() ||
+            !Uri.TryCreate(value, UriKind.Absolute, out destination!) ||
+            !string.IsNullOrEmpty(destination.UserInfo) ||
+            (destination.Scheme != Uri.UriSchemeHttps &&
+             (destination.Scheme != Uri.UriSchemeHttp || !destination.IsLoopback)) ||
+            !IsRoomNavigationPath(destination.AbsolutePath))
+        {
+            validationError =
+                "The room URL must use HTTPS (or loopback HTTP) without credentials.";
+            return false;
+        }
+        validationError = string.Empty;
+        return true;
+    }
+
+    private static bool IsRoomNavigationPath(string path)
+    {
+        if (path is "/custom" or "/custom/") return true;
+        const string roomPrefix = "/rooms/";
+        if (!path.StartsWith(roomPrefix, StringComparison.Ordinal)) return false;
+        var roomName = path[roomPrefix.Length..];
+        if (roomName.EndsWith("/", StringComparison.Ordinal)) roomName = roomName[..^1];
+        return roomName.Length > 0 && !roomName.Contains('/');
+    }
+
+    private void RestoreAndForeground()
+    {
+        if (IsDisposed) return;
+        if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+        if (!Visible) Show();
+        BringToFront();
+        Activate();
+        Program.SetForegroundWindow(Handle);
+    }
+
+    private static async Task WriteNavigationResponseAsync(
+        Stream stream,
+        NavigationPipeResponse response,
+        CancellationToken cancellationToken)
+    {
+        var json = response.Message is null
+            ? JsonSerializer.Serialize(new { accepted = response.Accepted })
+            : JsonSerializer.Serialize(new { accepted = response.Accepted, message = response.Message });
+        var payload = StrictUtf8.GetBytes(json + "\n");
+        await stream.WriteAsync(payload, cancellationToken).ConfigureAwait(false);
+        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task CheckServiceHealth()
@@ -673,7 +1105,8 @@ internal sealed class CompanionWindow : Form
 
     private async Task<CoreWebView2NavigationCompletedEventArgs> NavigateAndWait(
         Uri destination,
-        TimeSpan timeout)
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default)
     {
         var navigation = new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -690,7 +1123,20 @@ internal sealed class CompanionWindow : Form
         try
         {
             browser.CoreWebView2.Navigate(destination.AbsoluteUri);
-            return await navigation.Task.WaitAsync(timeout);
+            try
+            {
+                return await navigation.Task.WaitAsync(timeout, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                browser.CoreWebView2.Stop();
+                throw;
+            }
+            catch (TimeoutException)
+            {
+                browser.CoreWebView2.Stop();
+                throw;
+            }
         }
         finally
         {
@@ -802,4 +1248,8 @@ internal sealed class CompanionWindow : Form
             // A missing or locked-down default browser should not crash the Companion window.
         }
     }
+
+    private sealed record NavigationPipeRequest(string Url);
+
+    private sealed record NavigationPipeResponse(bool Accepted, string? Message = null);
 }

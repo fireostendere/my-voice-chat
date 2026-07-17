@@ -16,6 +16,7 @@ describe('companion installer lifecycle', () => {
     expect(manifest).toContain('SetupIconFile=..\\assets\\livekit-companion.ico');
     expect(manifest).toContain('build\\app-launcher\\*');
     expect(manifest).toContain('Source: "..\\client-config.js"');
+    expect(manifest).toContain('Source: "..\\native-navigation-service.js"');
     expect(manifest).toContain('MicrosoftEdgeWebview2Setup.exe');
     expect(manifest).toContain('/silent /install');
     expect(manifest).toContain('WebView2RuntimeMissing');
@@ -35,9 +36,18 @@ describe('companion installer lifecycle', () => {
     expect(launcher).toContain('StartBackend()');
     expect(launcher).toContain('COMPANION_LOG_FILE');
     expect(launcher).toContain('COMPANION_WEB_APP_URL');
+    expect(launcher).toContain('COMPANION_LAUNCHER_PATH');
+    expect(launcher).toContain('LiveKitCompanion.Navigation.');
+    expect(launcher).toContain('NamedPipeServerStream');
+    expect(launcher).toContain('PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly');
+    expect(launcher).toContain('MaxNavigationRequestBytes = 16 * 1024');
+    expect(launcher).toContain('protocolVersion != 1');
+    expect(launcher).toContain('IsSameOrigin(destination, webAppUri)');
+    expect(launcher).toContain('Program.SetForegroundWindow(Handle)');
     expect(launcher).toContain('CompanionWindow');
     expect(launcher).toContain('clientConfigUri = new Uri(uiUri, "api/client-config")');
     expect(launcher).toContain('COMPANION_SMOKE_EXPECTED_TITLE');
+    expect(launcher).toContain('command == "--open"');
     expect(launcher).toContain('--use-fake-ui-for-media-stream');
     expect(launcher).toContain('--use-fake-device-for-media-stream');
     expect(launcher).toContain('__LIVEKIT_COMPANION__');
@@ -56,6 +66,7 @@ describe('companion installer lifecycle', () => {
 
   it('runs the installed WebView2 client against an isolated browser-capability fixture', () => {
     const fixture = readRepoFile('companion', 'scripts', 'webview-smoke-server.js');
+    const handoff = readRepoFile('companion', 'scripts', 'native-handoff-smoke-client.js');
     const workflow = readRepoFile('.github', 'workflows', 'companion-release.yaml');
 
     expect(fixture).toContain("'Cross-Origin-Embedder-Policy': 'credentialless'");
@@ -69,11 +80,29 @@ describe('companion installer lifecycle', () => {
     expect(fixture).toContain("window.__LIVEKIT_COMPANION__?.host === 'webview2'");
     expect(fixture).toContain("window.__LIVEKIT_COMPANION__?.platform === 'windows'");
     expect(fixture).toContain('window.__LIVEKIT_COMPANION__?.version === 1');
+    expect(fixture).toContain("hello.capabilities.includes('open-room')");
+    expect(fixture).not.toContain("type: 'open-room'");
+    expect(fixture).toContain("url.pathname === '/smoke-status'");
+    expect(fixture).toContain("url.pathname === '/smoke-result'");
+    expect(fixture).toContain("if (smokeState.status === 'failed') return;");
     expect(fixture).toContain("document.title = 'LiveKit Companion WebView Smoke OK'");
+
+    expect(handoff).toContain('origin: fixtureUrl.origin');
+    expect(handoff).toContain("type: 'open-room'");
+    expect(handoff).toContain("new URL('/rooms/native-handoff-smoke', fixtureUrl)");
+    expect(handoff).toContain("destination.search = '?codec=vp9&handoff=1'");
+    expect(handoff).toContain("destination.hash = '#handoff-secret'");
+    expect(handoff).toContain("message?.type !== 'open-room-result'");
+    expect(handoff).toContain('message.accepted !== true');
+    expect(handoff).toContain("result?.status === 'passed'");
 
     expect(workflow).toContain('"-p:CompanionWebAppUrl=$webAppUrl"');
     expect(workflow).toContain('companion/scripts/webview-smoke-server.js');
+    expect(workflow).toContain('companion/scripts/native-handoff-smoke-client.js');
     expect(workflow).toContain('$env:COMPANION_WEB_APP_URL = $fixtureUrl');
+    expect(workflow).toContain("$start = Start-Process $app -ArgumentList '--startup'");
+    expect(workflow).toContain('if ($existingWindow)');
+    expect(workflow).not.toContain("-ArgumentList '--window-smoke-test'");
     expect(workflow).toContain('http://127.0.0.1:7333/api/client-config');
     expect(workflow).toContain(
       "$env:COMPANION_SMOKE_EXPECTED_TITLE = 'LiveKit Companion WebView Smoke OK'",

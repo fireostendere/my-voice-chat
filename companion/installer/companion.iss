@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.6.0"
+  #define AppVersion "0.7.0"
 #endif
 
 #define AppName "LiveKit Companion"
@@ -55,6 +55,7 @@ Source: "build\LICENSE-node.txt"; DestDir: "{app}\runtime"; Flags: ignoreversion
 Source: "build\ptt-helper\LiveKitCompanionNative.exe"; DestDir: "{app}\app\bin"; Flags: ignoreversion
 Source: "..\index.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\client-config.js"; DestDir: "{app}\app"; Flags: ignoreversion
+Source: "..\native-navigation-service.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\origin-approval.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\origin-core.js"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\ptt-key-listener.js"; DestDir: "{app}\app"; Flags: ignoreversion
