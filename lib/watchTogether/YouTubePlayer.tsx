@@ -66,17 +66,27 @@ export function YouTubePlayer({ videoId, hostIdentity, isHost, sendSync, subscri
     const iframe = document.createElement('iframe');
     iframe.setAttribute('credentialless', '');
     (iframe as any).credentialless = true;
+    iframe.title = 'YouTube video player';
+    iframe.tabIndex = isHost ? 0 : -1;
+    iframe.inert = !isHost;
+    if (!isHost) {
+      iframe.classList.add('lk-watch-together-viewer-media');
+      iframe.setAttribute('aria-hidden', 'true');
+    }
     const params = new URLSearchParams({
       enablejsapi: '1',
       playsinline: '1',
       rel: '0',
-      controls: '1',
+      controls: isHost ? '1' : '0',
       disablekb: isHost ? '0' : '1',
+      fs: isHost ? '1' : '0',
       origin: window.location.origin,
     });
     iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?${params.toString()}`;
-    iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
-    iframe.allowFullscreen = true;
+    iframe.allow = isHost
+      ? 'autoplay; encrypted-media; fullscreen; picture-in-picture'
+      : 'autoplay; encrypted-media';
+    iframe.allowFullscreen = isHost;
     container.appendChild(iframe);
 
     loadYouTubeApi()
@@ -187,6 +197,7 @@ export function YouTubePlayer({ videoId, hostIdentity, isHost, sendSync, subscri
   return (
     <div className="lk-watch-together-embed-wrap">
       <div ref={containerRef} className="lk-watch-together-embed-frame" />
+      {!isHost && <div className="lk-watch-together-viewer-shield" aria-hidden="true" />}
       {needsGesture && <GestureOverlay onClick={handleGesture} delayed />}
       {!ready && !error && <div className="lk-watch-together-status">Connecting to YouTube…</div>}
       {error && (

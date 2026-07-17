@@ -133,11 +133,13 @@ export function UrlPlayer({ src, hostIdentity, isHost, sendSync, subscribe }: Pr
     <div className="lk-watch-together-video-wrap">
       <video
         ref={videoRef}
-        className="lk-watch-together-video"
-        controls
-        controlsList="nodownload"
+        className={`lk-watch-together-video${isHost ? '' : ' lk-watch-together-viewer-media'}`}
+        controls={isHost}
+        controlsList={isHost ? 'nodownload' : undefined}
+        disablePictureInPicture={!isHost}
         preload="auto"
         playsInline
+        tabIndex={isHost ? 0 : -1}
         onCanPlay={() => {
           setLoading(false);
           setError(null);

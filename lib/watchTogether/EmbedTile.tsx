@@ -55,14 +55,16 @@ export function EmbedTile() {
         <span className="lk-watch-together-role">
           {embed.isHost ? 'You control playback' : `Host: ${embed.hostIdentity}`}
         </span>
-        <button
-          type="button"
-          className="lk-button lk-watch-together-action"
-          onClick={enterFullscreen}
-          title="Fullscreen"
-        >
-          ⛶
-        </button>
+        {embed.isHost && (
+          <button
+            type="button"
+            className="lk-button lk-watch-together-action"
+            onClick={enterFullscreen}
+            title="Fullscreen"
+          >
+            ⛶
+          </button>
+        )}
         {embed.isHost && (
           <button type="button" className="lk-button lk-watch-together-stop" onClick={stopEmbed}>
             Stop

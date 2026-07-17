@@ -43,8 +43,16 @@ export function VkPlayer({ videoId, hostIdentity, isHost, sendSync, subscribe }:
     (iframe as HTMLIFrameElement & { credentialless: boolean }).credentialless = true;
     iframe.src = embedUrl;
     iframe.title = 'VK Video player';
-    iframe.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture; screen-wake-lock';
-    iframe.allowFullscreen = true;
+    iframe.tabIndex = isHost ? 0 : -1;
+    iframe.inert = !isHost;
+    if (!isHost) {
+      iframe.classList.add('lk-watch-together-viewer-media');
+      iframe.setAttribute('aria-hidden', 'true');
+    }
+    iframe.allow = isHost
+      ? 'autoplay; encrypted-media; fullscreen; picture-in-picture; screen-wake-lock'
+      : 'autoplay; encrypted-media';
+    iframe.allowFullscreen = isHost;
     iframe.referrerPolicy = 'strict-origin-when-cross-origin';
     container.appendChild(iframe);
 
@@ -184,6 +192,7 @@ export function VkPlayer({ videoId, hostIdentity, isHost, sendSync, subscribe }:
   return (
     <div className="lk-watch-together-embed-wrap">
       <div ref={containerRef} className="lk-watch-together-embed-frame" />
+      {!isHost && <div className="lk-watch-together-viewer-shield" aria-hidden="true" />}
       {needsGesture && <GestureOverlay onClick={handleGesture} delayed />}
       {!ready && !error && <div className="lk-watch-together-status">Connecting to VK Video…</div>}
       {error && <div className="lk-watch-together-status lk-watch-together-error">{error}</div>}

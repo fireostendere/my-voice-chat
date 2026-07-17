@@ -83,6 +83,13 @@ describe('VkPlayer', () => {
       />,
     );
     const iframe = container.querySelector('iframe')!;
+    expect(container.querySelector('.lk-watch-together-viewer-shield')).not.toBeNull();
+    expect(iframe.tabIndex).toBe(-1);
+    expect(iframe.inert).toBe(true);
+    expect(iframe.allowFullscreen).toBe(false);
+    expect(iframe.allow).not.toContain('fullscreen');
+    expect(iframe.allow).not.toContain('picture-in-picture');
+    expect(iframe.classList).toContain('lk-watch-together-viewer-media');
     const postMessage = vi
       .spyOn(iframe.contentWindow!, 'postMessage')
       .mockImplementation(() => undefined);
