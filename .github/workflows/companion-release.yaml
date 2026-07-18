@@ -63,7 +63,7 @@ jobs:
             throw 'COMPANION_WEB_APP_URL must be an HTTPS URL without embedded credentials.'
           }
           $webAppUrl = "$($parsedWebAppUrl.GetLeftPart([UriPartial]::Authority))/"
-          dotnet publish companion/app-launcher/LiveKitCompanion.csproj -c Release -r win-x64 -o companion/installer/build/app-launcher -p:Version=$version -p:DebugType=None -p:DebugSymbols=false "-p:CompanionWebAppUrl=$webAppUrl"
+          dotnet publish companion/app-launcher/LiveKitCompanion.csproj -c Release -r win-x64 -o companion/installer/build/app-launcher -p:Version=$version -p:CompanionAppVersion=$version -p:DebugType=None -p:DebugSymbols=false "-p:CompanionWebAppUrl=$webAppUrl"
           dotnet publish companion/ptt-helper/PttKeyState.csproj -c Release -r win-x64 -o companion/installer/build/ptt-helper -p:Version=$version
 
       - name: Prepare portable runtime

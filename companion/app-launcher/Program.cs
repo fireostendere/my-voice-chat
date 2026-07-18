@@ -343,7 +343,7 @@ internal static class Program
         }
     }
 
-    private static string? ReadAssemblyMetadata(string key)
+    internal static string? ReadAssemblyMetadata(string key)
     {
         return Assembly.GetExecutingAssembly()
             .GetCustomAttributes<AssemblyMetadataAttribute>()
@@ -1239,10 +1239,8 @@ internal sealed class CompanionWindow : Form
 
     private static string ResolveCompanionAppVersion()
     {
-        var informationalVersion = Assembly.GetExecutingAssembly()
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-            ?.InformationalVersion;
-        if (NullIfWhiteSpace(informationalVersion) is { } version) return version;
+        var packagedVersion = Program.ReadAssemblyMetadata("CompanionAppVersion");
+        if (NullIfWhiteSpace(packagedVersion) is { } version) return version;
 
         var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version;
         return assemblyVersion is null

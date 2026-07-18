@@ -53,15 +53,20 @@ const html = `<!doctype html>
       async function run() {
         assert(window.isSecureContext, 'The fixture is not a secure context.');
         assert(window.crossOriginIsolated, 'COOP/COEP did not enable cross-origin isolation.');
+        const companionMarker = window.__LIVEKIT_COMPANION__;
         assert(
-          window.__LIVEKIT_COMPANION__?.host === 'webview2' &&
-            window.__LIVEKIT_COMPANION__?.platform === 'windows' &&
-            window.__LIVEKIT_COMPANION__?.version === 1 &&
-            typeof window.__LIVEKIT_COMPANION__?.appVersion === 'string' &&
-            /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$/.test(
-              window.__LIVEKIT_COMPANION__.appVersion,
-            ),
+          companionMarker?.host === 'webview2' &&
+            companionMarker?.platform === 'windows' &&
+            companionMarker?.version === 1,
           'The native Companion marker is missing.',
+        );
+        assert(
+          typeof companionMarker.appVersion === 'string',
+          'The native Companion app version is missing.',
+        );
+        assert(
+          /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$/.test(companionMarker.appVersion),
+          'The native Companion app version is invalid.',
         );
         assert(navigator.mediaDevices?.getUserMedia, 'getUserMedia is unavailable.');
         assert(typeof window.RTCPeerConnection === 'function', 'RTCPeerConnection is unavailable.');

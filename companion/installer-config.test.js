@@ -59,13 +59,14 @@ describe('companion installer lifecycle', () => {
     expect(launcher).toContain('--use-fake-device-for-media-stream');
     expect(launcher).toContain('__LIVEKIT_COMPANION__');
     expect(launcher).toContain('appVersion:');
-    expect(launcher).toContain('AssemblyInformationalVersionAttribute');
+    expect(launcher).toContain('Program.ReadAssemblyMetadata("CompanionAppVersion")');
     expect(launcher).toContain('Application.Run(window)');
     expect(launcher).toContain('Icon.ExtractAssociatedIcon');
     expect(launcher).not.toContain('--app=');
     expect(appProject).toContain('Microsoft.Web.WebView2');
     expect(appProject).toContain('<UseWindowsForms>true</UseWindowsForms>');
     expect(appProject).toContain('AssemblyMetadata Include="CompanionWebAppUrl"');
+    expect(appProject).toContain('Include="CompanionAppVersion"');
     expect(tray).toContain('LiveKitCompanion.exe');
     expect(tray).toContain('startInfo.ArgumentList.Add("--open")');
     expect(tray).not.toContain('--app=');
@@ -86,10 +87,10 @@ describe('companion installer lifecycle', () => {
     expect(fixture).toContain('new RTCPeerConnection()');
     expect(fixture).toContain('HTMLMediaElement.prototype.captureStream');
     expect(fixture).toContain("new WebSocket('ws://127.0.0.1:7331')");
-    expect(fixture).toContain("window.__LIVEKIT_COMPANION__?.host === 'webview2'");
-    expect(fixture).toContain("window.__LIVEKIT_COMPANION__?.platform === 'windows'");
-    expect(fixture).toContain('window.__LIVEKIT_COMPANION__?.version === 1');
-    expect(fixture).toContain("typeof window.__LIVEKIT_COMPANION__?.appVersion === 'string'");
+    expect(fixture).toContain("companionMarker?.host === 'webview2'");
+    expect(fixture).toContain("companionMarker?.platform === 'windows'");
+    expect(fixture).toContain('companionMarker?.version === 1');
+    expect(fixture).toContain("typeof companionMarker.appVersion === 'string'");
     expect(fixture).toContain("hello.capabilities.includes('open-room')");
     expect(fixture).not.toContain("type: 'open-room'");
     expect(fixture).toContain("url.pathname === '/smoke-status'");
@@ -108,6 +109,7 @@ describe('companion installer lifecycle', () => {
 
     expect(workflow).toContain('"-p:CompanionWebAppUrl=$webAppUrl"');
     expect(workflow).toContain('-p:Version=$version');
+    expect(workflow).toContain('-p:CompanionAppVersion=$version');
     expect(workflow).toContain('companion/scripts/webview-smoke-server.js');
     expect(workflow).toContain('companion/scripts/native-handoff-smoke-client.js');
     expect(workflow).toContain('$env:COMPANION_WEB_APP_URL = $fixtureUrl');

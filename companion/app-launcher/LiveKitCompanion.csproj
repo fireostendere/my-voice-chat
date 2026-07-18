@@ -18,6 +18,10 @@
   </PropertyGroup>
   <ItemGroup>
     <AssemblyMetadata Include="CompanionWebAppUrl" Value="$(CompanionWebAppUrl)" />
+    <AssemblyMetadata
+      Include="CompanionAppVersion"
+      Value="$(CompanionAppVersion)"
+      Condition="'$(CompanionAppVersion)' != ''" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
