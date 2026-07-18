@@ -1,7 +1,13 @@
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+const require = createRequire(import.meta.url);
+const {
+  COMPANION_VERSION_PATTERN_SOURCE,
+  html: renderedSmokeHtml,
+} = require('./scripts/webview-smoke-server.js');
 const readInstallerFile = (name) =>
   readFileSync(path.join(process.cwd(), 'companion', 'installer', name), 'utf8');
 const readRepoFile = (...parts) => readFileSync(path.join(process.cwd(), ...parts), 'utf8');
@@ -91,6 +97,11 @@ describe('companion installer lifecycle', () => {
     expect(fixture).toContain("companionMarker?.platform === 'windows'");
     expect(fixture).toContain('companionMarker?.version === 1');
     expect(fixture).toContain("typeof companionMarker.appVersion === 'string'");
+    expect(renderedSmokeHtml).toContain(
+      `new RegExp(${JSON.stringify(COMPANION_VERSION_PATTERN_SOURCE)})`,
+    );
+    expect(new RegExp(COMPANION_VERSION_PATTERN_SOURCE).test('0.8.0')).toBe(true);
+    expect(new RegExp(COMPANION_VERSION_PATTERN_SOURCE).test('0.8.0+build.1')).toBe(true);
     expect(fixture).toContain("hello.capabilities.includes('open-room')");
     expect(fixture).not.toContain("type: 'open-room'");
     expect(fixture).toContain("url.pathname === '/smoke-status'");

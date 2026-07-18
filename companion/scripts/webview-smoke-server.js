@@ -7,6 +7,7 @@ const port = parsePort(process.argv[2] || process.env.COMPANION_SMOKE_PORT || DE
 const TARGET_PATH = '/rooms/native-handoff-smoke';
 const TARGET_SEARCH = '?codec=vp9&handoff=1';
 const TARGET_HASH = '#handoff-secret';
+const COMPANION_VERSION_PATTERN_SOURCE = '^[0-9]+[.][0-9]+[.][0-9]+(?:[-+][0-9A-Za-z.+-]+)?$';
 const TARGET_URL = `http://127.0.0.1:${port}${TARGET_PATH}${TARGET_SEARCH}${TARGET_HASH}`;
 const smokeState = {
   status: 'pending',
@@ -65,8 +66,11 @@ const html = `<!doctype html>
           'The native Companion app version is missing.',
         );
         assert(
-          /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$/.test(companionMarker.appVersion),
-          'The native Companion app version is invalid.',
+          new RegExp(${JSON.stringify(COMPANION_VERSION_PATTERN_SOURCE)}).test(
+            companionMarker.appVersion,
+          ),
+          'The native Companion app version is invalid: ' +
+            JSON.stringify(companionMarker.appVersion).slice(0, 128),
         );
         assert(navigator.mediaDevices?.getUserMedia, 'getUserMedia is unavailable.');
         assert(typeof window.RTCPeerConnection === 'function', 'RTCPeerConnection is unavailable.');
@@ -231,18 +235,22 @@ const server = http.createServer((request, response) => {
   send(response, 404, 'not found\n', 'text/plain; charset=utf-8');
 });
 
-server.on('error', (error) => {
-  console.error(`[webview-smoke] ${error.message}`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  server.on('error', (error) => {
+    console.error(`[webview-smoke] ${error.message}`);
+    process.exitCode = 1;
+  });
 
-server.listen(port, '127.0.0.1', () => {
-  console.log(`[webview-smoke] listening on http://127.0.0.1:${port}/`);
-});
+  server.listen(port, '127.0.0.1', () => {
+    console.log(`[webview-smoke] listening on http://127.0.0.1:${port}/`);
+  });
 
-for (const signal of ['SIGINT', 'SIGTERM']) {
-  process.on(signal, () => server.close(() => process.exit(0)));
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.on(signal, () => server.close(() => process.exit(0)));
+  }
 }
+
+module.exports = { COMPANION_VERSION_PATTERN_SOURCE, html };
 
 function send(response, statusCode, body, contentType) {
   response.writeHead(statusCode, { ...commonHeaders(), 'Content-Type': contentType });
