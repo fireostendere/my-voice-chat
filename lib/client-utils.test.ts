@@ -6,6 +6,7 @@ import {
   isLowPowerDevice,
   isMeetStaging,
   randomString,
+  roomHrefFromInput,
 } from './client-utils';
 
 describe('randomString', () => {
@@ -16,6 +17,28 @@ describe('randomString', () => {
 
   it('only uses lowercase alphanumerics', () => {
     expect(randomString(256)).toMatch(/^[a-z0-9]*$/);
+  });
+});
+
+describe('roomHrefFromInput', () => {
+  const origin = 'https://chat.example.com';
+  it('joins by name or same-site invitation and preserves encryption and room options', () => {
+    expect(roomHrefFromInput(' friends ', origin)).toBe('/rooms/friends');
+    expect(roomHrefFromInput(`${origin}/rooms/friends?codec=vp8#my%20key`, origin)).toBe(
+      '/rooms/friends?codec=vp8#my%20key',
+    );
+  });
+  it('rejects unrelated routes, other origins, and URLs containing credentials', () => {
+    for (const input of [
+      '',
+      '/',
+      '/custom?token=secret',
+      '//other.example/rooms/friends',
+      'javascript:alert(1)',
+      'https://user:password@chat.example.com/rooms/friends',
+    ]) {
+      expect(roomHrefFromInput(input, origin)).toBeNull();
+    }
   });
 });
 

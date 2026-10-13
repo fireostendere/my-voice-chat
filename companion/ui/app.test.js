@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 function installUi() {
   document.body.innerHTML = `
     <meta name="companion-token" content="test-token" />
+    <div id="service-state"><strong></strong></div>
+    <button id="open-chat-button"></button>
     <select id="room-select"></select>
     <span id="room-count"></span>
     <form id="server-form">
@@ -152,5 +154,117 @@ describe('companion trusted server settings', () => {
       '/api/settings/origin',
       expect.objectContaining({ method: 'DELETE' }),
     ]);
+  });
+});
+
+function activeStatus() {
+  return {
+    rooms: [
+      {
+        id: 'room-1',
+        roomName: 'friends',
+        participantIdentity: 'Alice',
+        playback: {
+          active: true,
+          phase: 'playing',
+          name: 'Movie',
+          paused: false,
+          duration: 120,
+          currentTime: 10,
+          canSeek: true,
+        },
+      },
+    ],
+    approvedOrigins: ['https://chat.example'],
+    webAppUrl: 'https://chat.example/',
+    supportedKeys: ['F8'],
+    pttKey: 'F8',
+  };
+}
+
+function response(body, status = 200) {
+  return { ok: status === 200, status, json: async () => body };
+}
+
+describe('companion service recovery', () => {
+  it('disables stale controls on an outage, preserves input, and recovers on the next refresh', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(activeStatus()));
+    vi.stubGlobal('fetch', fetchMock);
+    await import('./app.js');
+    const state = document.querySelector('#service-state');
+    const magnet = document.querySelector('#magnet-input');
+    const play = document.querySelector('#play-button');
+    await waitFor(() => expect(state.dataset.state).toBe('online'));
+    fireEvent.input(magnet, {
+      target: { value: 'magnet:?xt=urn:btih:0123456789012345678901234567890123456789' },
+    });
+    expect(play.disabled).toBe(false);
+    fetchMock.mockRejectedValueOnce(new Error('Network unavailable'));
+    fireEvent.click(document.querySelector('#refresh-button'));
+    await waitFor(() => expect(state.dataset.state).toBe('offline'));
+    expect(play.disabled).toBe(true);
+    expect(document.querySelector('#playback-toggle').disabled).toBe(true);
+    expect(document.querySelector('#key-capture-button').disabled).toBe(true);
+    expect(magnet.value).toContain('magnet:');
+    fireEvent.click(document.querySelector('#refresh-button'));
+    await waitFor(() => expect(state.dataset.state).toBe('online'));
+    expect(play.disabled).toBe(false);
+  });
+
+  it('keeps focused settings and the selected room intact during status polling', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(activeStatus())));
+    await import('./app.js');
+    await waitFor(() =>
+      expect(document.querySelector('#service-state').dataset.state).toBe('online'),
+    );
+    const originButton = document.querySelector('[data-origin-action="open"]');
+    const roomOption = document.querySelector('#room-select option');
+    originButton.focus();
+    fireEvent.click(document.querySelector('#refresh-button'));
+    await waitFor(() =>
+      expect(document.querySelector('#toast').textContent).toContain('refreshed'),
+    );
+    expect(document.activeElement).toBe(originButton);
+    expect(document.querySelector('#room-select option')).toBe(roomOption);
+  });
+
+  it('keeps torrent sending disabled while a request is pending, even after a refresh', async () => {
+    let finishSend;
+    const fetchMock = vi.fn((path) =>
+      path === '/api/torrent'
+        ? new Promise((resolve) => {
+            finishSend = resolve;
+          })
+        : Promise.resolve(response(activeStatus())),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await import('./app.js');
+    await waitFor(() =>
+      expect(document.querySelector('#service-state').dataset.state).toBe('online'),
+    );
+    fireEvent.input(document.querySelector('#magnet-input'), {
+      target: { value: 'magnet:?xt=urn:btih:0123456789012345678901234567890123456789' },
+    });
+    fireEvent.click(document.querySelector('#play-button'));
+    fireEvent.click(document.querySelector('#refresh-button'));
+    await waitFor(() =>
+      expect(document.querySelector('#toast').textContent).toContain('refreshed'),
+    );
+    expect(document.querySelector('#play-button').disabled).toBe(true);
+    expect(fetchMock.mock.calls.filter(([path]) => path === '/api/torrent')).toHaveLength(1);
+    finishSend(response({ message: 'Sent.' }));
+    await waitFor(() => expect(document.querySelector('#magnet-input').disabled).toBe(false));
+  });
+
+  it('asks for a page reload when the service has replaced its settings token', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(response({ error: 'Invalid companion token.' }, 403)),
+    );
+    await import('./app.js');
+    await waitFor(() =>
+      expect(document.querySelector('#refresh-button').textContent).toBe('Reload settings'),
+    );
+    expect(document.querySelector('#footer-status').textContent).toContain('service restarted');
   });
 });

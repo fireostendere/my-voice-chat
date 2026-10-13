@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { DebugMode } from '@/lib/Debug';
 import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
 import { RecordingIndicator } from '@/lib/RecordingIndicator';
@@ -13,20 +14,15 @@ import {
   RoomContext,
 } from '@livekit/components-react';
 import { CustomVideoConference } from '@/lib/CustomVideoConference';
-import {
-  VideoCodec,
-  Room,
-  DeviceUnsupportedError,
-  RoomConnectOptions,
-  RoomEvent,
-} from 'livekit-client';
+import { VideoCodec, Room } from 'livekit-client';
 import { useRouter } from 'next/navigation';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { useLowCPUOptimizer } from '@/lib/usePerformanceOptimiser';
 import { useWakeLock } from '@/lib/useWakeLock';
 import { usePushToTalk } from '@/lib/usePushToTalk';
-import { PushToTalkIndicator } from '@/lib/PushToTalkIndicator';
 import { buildManagedRoomOptions } from '@/lib/roomOptions';
+import { useRoomConnection } from '@/lib/useRoomConnection';
+import { RoomConnectionError } from '@/lib/RoomConnectionError';
 
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
@@ -45,7 +41,7 @@ export function PageClientImpl(props: {
   const preJoinDefaults = React.useMemo(() => {
     return {
       username: '',
-      videoEnabled: true,
+      videoEnabled: false,
       audioEnabled: true,
     };
   }, []);
@@ -53,37 +49,86 @@ export function PageClientImpl(props: {
     undefined,
   );
 
+  const [joining, setJoining] = React.useState(false);
+  const [joinError, setJoinError] = React.useState<string>();
+  const joinRequest = React.useRef<AbortController | null>(null);
+  React.useEffect(() => () => joinRequest.current?.abort(), []);
+
   const handlePreJoinSubmit = React.useCallback(
     async (values: LocalUserChoices) => {
-      setPreJoinChoices(values);
-      const url = new URL(CONN_DETAILS_ENDPOINT, window.location.origin);
-      url.searchParams.append('roomName', props.roomName);
-      url.searchParams.append('participantName', values.username);
-      if (props.region) {
-        url.searchParams.append('region', props.region);
+      if (joinRequest.current) return;
+      const controller = new AbortController();
+      joinRequest.current = controller;
+      setJoining(true);
+      setJoinError(undefined);
+      try {
+        const url = new URL(CONN_DETAILS_ENDPOINT, window.location.origin);
+        url.searchParams.set('roomName', props.roomName);
+        url.searchParams.set('participantName', values.username);
+        if (props.region) url.searchParams.set('region', props.region);
+        const response = await fetch(url, {
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
+        });
+        if (!response.ok) throw new Error('Could not get access to the room. Please try again.');
+        const details: ConnectionDetails = await response.json();
+        if (
+          !details ||
+          typeof details.serverUrl !== 'string' ||
+          !details.serverUrl ||
+          typeof details.participantToken !== 'string' ||
+          !details.participantToken
+        )
+          throw new Error('The server returned incomplete room details. Please try again.');
+        if (controller.signal.aborted) return;
+        setPreJoinChoices(values);
+        setConnectionDetails(details);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setJoinError(error instanceof Error ? error.message : 'Could not join the room.');
+        }
+      } finally {
+        if (!controller.signal.aborted) setJoining(false);
+        if (joinRequest.current === controller) joinRequest.current = null;
       }
-      const connectionDetailsResp = await fetch(url.toString());
-      const connectionDetailsData = await connectionDetailsResp.json();
-      setConnectionDetails(connectionDetailsData);
     },
     [props.region, props.roomName],
   );
-  const handlePreJoinError = React.useCallback((e: any) => console.error(e), []);
+  const handlePreJoinError = React.useCallback(() => {
+    setJoinError('Could not access your devices. Check permissions, or join with them turned off.');
+  }, []);
 
   return (
     <main data-lk-theme="default" style={{ height: '100%' }}>
       {connectionDetails === undefined || preJoinChoices === undefined ? (
-        <div style={{ display: 'grid', placeItems: 'center', height: '100%' }}>
-          <PreJoin
-            defaults={preJoinDefaults}
-            onSubmit={handlePreJoinSubmit}
-            onError={handlePreJoinError}
-          />
+        <div className="lk-prejoin-screen">
+          <header>
+            <Link href="/">← Home</Link>
+            <span>VOICE ROOM</span>
+            <h1>{props.roomName}</h1>
+            <p>Check your microphone, choose a name, and come on in.</p>
+          </header>
+          {joinError && (
+            <p className="lk-prejoin-error" role="alert">
+              {joinError}
+            </p>
+          )}
+          <fieldset disabled={joining} aria-busy={joining}>
+            <PreJoin
+              defaults={preJoinDefaults}
+              joinLabel={joining ? 'Joining…' : 'Join room'}
+              onSubmit={handlePreJoinSubmit}
+              onError={handlePreJoinError}
+            />
+          </fieldset>
         </div>
       ) : (
         <VideoConferenceComponent
           connectionDetails={connectionDetails}
           userChoices={preJoinChoices}
+          onRetry={() => {
+            setConnectionDetails(undefined);
+            void handlePreJoinSubmit(preJoinChoices);
+          }}
           options={{
             codec: props.codec,
             hq: props.hq,
@@ -96,6 +141,7 @@ export function PageClientImpl(props: {
 }
 
 function VideoConferenceComponent(props: {
+  onRetry: () => void;
   userChoices: LocalUserChoices;
   connectionDetails: ConnectionDetails;
   options: {
@@ -105,8 +151,6 @@ function VideoConferenceComponent(props: {
   };
 }) {
   const { worker, e2eePassphrase, keyProvider, e2eeEnabled } = useSetupE2EE();
-
-  const [e2eeSetupComplete, setE2eeSetupComplete] = React.useState(false);
 
   const roomOptions = React.useMemo(() => {
     return buildManagedRoomOptions({
@@ -131,88 +175,17 @@ function VideoConferenceComponent(props: {
 
   const room = React.useMemo(() => new Room(roomOptions), [roomOptions]);
 
-  React.useEffect(() => {
-    if (e2eeEnabled && e2eePassphrase) {
-      keyProvider
-        .setKey(e2eePassphrase)
-        .then(() => {
-          room.setE2EEEnabled(true).catch((e) => {
-            if (e instanceof DeviceUnsupportedError) {
-              alert(
-                `You're trying to join an encrypted meeting, but your browser does not support it. Please update it to the latest version and try again.`,
-              );
-              console.error(e);
-            } else {
-              throw e;
-            }
-          });
-        })
-        .then(() => setE2eeSetupComplete(true));
-    } else {
-      setE2eeSetupComplete(true);
-    }
-  }, [e2eeEnabled, room, e2eePassphrase, keyProvider]);
-
-  const connectOptions = React.useMemo((): RoomConnectOptions => {
-    return {
-      autoSubscribe: true,
-    };
-  }, []);
-
   const router = useRouter();
   const handleOnLeave = React.useCallback(() => router.push('/'), [router]);
-  const handleError = React.useCallback((error: Error) => {
-    console.error(error);
-    alert(`Encountered an unexpected error, check the console logs for details: ${error.message}`);
-  }, []);
-  const handleEncryptionError = React.useCallback((error: Error) => {
-    console.error(error);
-    alert(
-      `Encountered an unexpected encryption error, check the console logs for details: ${error.message}`,
-    );
-  }, []);
-
-  React.useEffect(() => {
-    room.on(RoomEvent.Disconnected, handleOnLeave);
-    room.on(RoomEvent.EncryptionError, handleEncryptionError);
-    room.on(RoomEvent.MediaDevicesError, handleError);
-
-    if (e2eeSetupComplete) {
-      room
-        .connect(
-          props.connectionDetails.serverUrl,
-          props.connectionDetails.participantToken,
-          connectOptions,
-        )
-        .catch((error) => {
-          handleError(error);
-        });
-      if (props.userChoices.videoEnabled) {
-        room.localParticipant.setCameraEnabled(true).catch((error) => {
-          handleError(error);
-        });
-      }
-      if (props.userChoices.audioEnabled) {
-        room.localParticipant.setMicrophoneEnabled(true).catch((error) => {
-          handleError(error);
-        });
-      }
-    }
-    return () => {
-      room.off(RoomEvent.Disconnected, handleOnLeave);
-      room.off(RoomEvent.EncryptionError, handleEncryptionError);
-      room.off(RoomEvent.MediaDevicesError, handleError);
-    };
-  }, [
-    connectOptions,
-    e2eeSetupComplete,
-    handleEncryptionError,
-    handleError,
-    handleOnLeave,
-    props.connectionDetails,
-    props.userChoices,
-    room,
-  ]);
+  const { error } = useRoomConnection(room, {
+    serverUrl: props.connectionDetails.serverUrl,
+    token: props.connectionDetails.participantToken,
+    audioEnabled: props.userChoices.audioEnabled,
+    videoEnabled: props.userChoices.videoEnabled,
+    e2eePassphrase,
+    keyProvider,
+    onLeave: handleOnLeave,
+  });
 
   const lowPowerMode = useLowCPUOptimizer(room);
 
@@ -228,14 +201,20 @@ function VideoConferenceComponent(props: {
   return (
     <div className="lk-room-container">
       <RoomContext.Provider value={room}>
-        <KeyboardShortcuts />
-        <PushToTalkIndicator {...pushToTalk} />
-        <CustomVideoConference
-          chatMessageFormatter={formatChatMessageLinks}
-          SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
-        />
-        <DebugMode />
-        <RecordingIndicator />
+        {error ? (
+          <RoomConnectionError error={error} onRetry={props.onRetry} onLeave={handleOnLeave} />
+        ) : (
+          <>
+            <KeyboardShortcuts />
+            <CustomVideoConference
+              pushToTalk={pushToTalk}
+              chatMessageFormatter={formatChatMessageLinks}
+              SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
+            />
+            <DebugMode />
+            <RecordingIndicator />
+          </>
+        )}
       </RoomContext.Provider>
     </div>
   );

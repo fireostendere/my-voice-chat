@@ -64,12 +64,15 @@ Two ways to join a room, each with its own entry route and client component:
 | **Demo / managed** | `app/rooms/[roomName]/page.tsx` | `GET /api/connection-details` mints a JWT server-side | `app/rooms/[roomName]/PageClientImpl.tsx`  |
 | **Custom**         | `app/custom/page.tsx`           | URL already carries `liveKitUrl` + `token` (BYO)      | `app/custom/VideoConferenceClientImpl.tsx` |
 
-- The landing page (`app/page.tsx`) is a tabbed launcher for those two modes. It only
-  navigates to the generated room route; Companion detection happens on that destination.
+- The landing page (`app/page.tsx`) creates voice rooms, joins same-site room invitations
+  or names, and keeps custom server/token entry in a separate tab. It only navigates;
+  Companion detection happens on the destination.
 - Both destination page shells wrap their client in `CompanionRouteGate`. The gate must
   resolve before either LiveKit client mounts, especially the auto-connecting custom flow.
-- Both client components build a `livekit-client` `Room`, connect, and render the
-  prefab `<VideoConference />` from `@livekit/components-react` inside a `RoomContext.Provider`.
+- Both client components build a `livekit-client` `Room` and use `useRoomConnection`
+  to await encryption, connect, enable selected devices, and disconnect on unmount.
+  They render `CustomVideoConference` inside a `RoomContext.Provider`. Camera starts
+  off by default; saved managed-room device choices still apply.
 - Server route handlers (`app/api/**`) are the only server code:
   - `connection-details` → issues a short-lived (`5m`) participant JWT.
   - `record/start` + `record/stop` → control LiveKit Egress (S3 output).

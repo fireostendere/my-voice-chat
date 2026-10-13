@@ -27,12 +27,16 @@ import { CustomChat } from './watchTogether/CustomChat';
 import { CinemaPanel } from './watchTogether/CinemaPanel';
 import { CompanionDownloadLink } from './CompanionDownloadLink';
 import { CompanionRoomBridge } from './watchTogether/CompanionRoomBridge';
+import { RoomToolbar } from './RoomToolbar';
+import { PushToTalkIndicator } from './PushToTalkIndicator';
+import type { PushToTalkState } from './usePushToTalk';
 
 export interface CustomVideoConferenceProps extends React.HTMLAttributes<HTMLDivElement> {
   chatMessageFormatter?: MessageFormatter;
   chatMessageEncoder?: MessageEncoder;
   chatMessageDecoder?: MessageDecoder;
   SettingsComponent?: React.ComponentType;
+  pushToTalk?: PushToTalkState;
 }
 
 export function CustomVideoConference(props: CustomVideoConferenceProps) {
@@ -48,6 +52,7 @@ function CustomVideoConferenceInner({
   chatMessageDecoder,
   chatMessageEncoder,
   SettingsComponent,
+  pushToTalk,
   ...props
 }: CustomVideoConferenceProps) {
   const [widgetState, setWidgetState] = React.useState<WidgetState>({
@@ -114,6 +119,14 @@ function CustomVideoConferenceInner({
     <div className="lk-video-conference" {...props}>
       <LayoutContextProvider value={layoutContext} onWidgetChange={setWidgetState}>
         <div className="lk-video-conference-inner">
+          <header className="lk-room-header">
+            <RoomToolbar />
+            <div className="lk-room-tools">
+              {pushToTalk && <PushToTalkIndicator {...pushToTalk} />}
+              <CinemaPanel />
+              <CompanionDownloadLink compact className="lk-room-companion-download" />
+            </div>
+          </header>
           {embedActive ? (
             <div className="lk-focus-layout-wrapper">
               <FocusLayoutContainer>
@@ -139,10 +152,6 @@ function CustomVideoConferenceInner({
               </FocusLayoutContainer>
             </div>
           )}
-          <div className="lk-room-tools">
-            <CinemaPanel />
-            <CompanionDownloadLink compact className="lk-room-companion-download" />
-          </div>
           <ControlBar controls={{ chat: true, settings: !!SettingsComponent }} />
         </div>
         <CustomChat

@@ -50,7 +50,7 @@ only when it is missing.
 Opening `LiveKitCompanion.exe` from the desktop or Start menu starts the bundled
 background service, waits for it to become ready, and opens the complete voice-chat web
 client in its own WinForms/WebView2 window. The native toolbar switches between
-**Home / Chat** and the localhost **Settings** page and also provides Back and Reload.
+**Chat** and a separate localhost **Settings** window and also provides Back and Reload.
 Links to other origins open in the default browser. The window and its taskbar entry
 belong to `LiveKitCompanion.exe` and use the embedded LiveKit icon. The user-facing
 shortcuts point directly to this EXE; there are no batch or VBS launchers and no config
@@ -88,7 +88,7 @@ Release builds open the managed web-app origin embedded by the Windows workflow.
 uses the `COMPANION_WEB_APP_URL` repository variable and falls back to
 `https://api.iroslyakov.com/`; a runtime environment variable with the same name takes
 precedence. For an unmanaged manual/development installation, choose **Settings →
-Voice-chat server → Connect in app**. The selected origin is saved and becomes both
+Your chat app → Connect in app**. The selected origin is saved and becomes both
 the main client and a trusted companion origin. This is the web-app origin, not the
 LiveKit WebSocket URL, API key, or API secret.
 
@@ -96,6 +96,12 @@ Remote addresses must use HTTPS. Plain HTTP is accepted only for loopback develo
 (`localhost`, `127.0.0.1`, or `[::1]`). If no client is configured, or the configured
 page cannot load, the native window falls back to localhost Settings. Changing the
 repository variable requires a new release build or manual workflow run.
+
+Settings opens in a separate window, so adjusting the talk key or cinema controls
+does not leave the room. **Chat** and **Open chat** return to the current conversation
+without reloading it. The service indicator reflects real availability; controls
+disable on an outage and recover automatically. If the service restarts, use
+**Reload settings** to refresh its session.
 
 The Settings page lists active voice-chat rooms. Choose a `.torrent` file or paste a
 magnet link to start it in the selected room, then use the same panel to play, pause,

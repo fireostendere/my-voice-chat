@@ -18,4 +18,8 @@ describe('PushToTalkIndicator', () => {
     render(<PushToTalkIndicator connected talking />);
     expect(screen.getByText(/Talking/)).toBeTruthy();
   });
+  it('explains why the microphone is muted after a lost companion connection', () => {
+    render(<PushToTalkIndicator connected={false} talking={false} interrupted />);
+    expect(screen.getByRole('status').textContent).toContain('PTT reconnecting · microphone muted');
+  });
 });

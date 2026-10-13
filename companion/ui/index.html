@@ -17,12 +17,12 @@
       <header class="masthead">
         <div class="brand-mark"><img src="/livekit.png?v=2" alt="" /></div>
         <div class="brand-copy">
-          <span class="eyebrow">LOCAL MEDIA BRIDGE</span>
+          <span class="eyebrow">YOUR VOICE-CHAT DESKTOP</span>
           <h1>LiveKit <em>Companion</em></h1>
         </div>
-        <div class="service-state" id="service-state">
+        <div class="service-state" id="service-state" role="status" data-state="connecting">
           <span></span>
-          <strong>ONLINE</strong>
+          <strong>CONNECTING</strong>
           <small>THIS PC</small>
         </div>
       </header>
@@ -39,6 +39,9 @@
           <select id="room-select" aria-label="Active voice-chat room"></select>
           <span aria-hidden="true">⌄</span>
         </label>
+        <button type="button" class="secondary-action open-chat" id="open-chat-button" disabled>
+          Open chat ↗
+        </button>
       </section>
 
       <div class="workspace">
@@ -46,8 +49,8 @@
           <div class="panel-heading connection-heading">
             <span class="section-index">02</span>
             <div>
-              <span class="eyebrow">DESKTOP WEB CLIENT</span>
-              <h2>Voice-chat server</h2>
+              <span class="eyebrow">CONNECTION</span>
+              <h2>Your chat app</h2>
             </div>
             <span class="connection-mode" id="connection-mode">MANUAL</span>
           </div>
@@ -91,7 +94,7 @@
           </div>
 
           <button type="button" class="drop-zone" id="drop-zone">
-            <span class="drop-icon">＋</span>
+            <span class="drop-icon" aria-hidden="true">+</span>
             <strong id="file-label">Choose a .torrent file</strong>
             <small>or drop it here · 2 MB maximum</small>
           </button>
@@ -146,7 +149,8 @@
             <span><i></i> SAVES INSTANTLY</span>
           </div>
           <p class="key-note" id="key-capture-help">
-            Keyboard keys and Mouse 4 / 5 are supported. The helper observes only the active bind.
+            Hold this key to talk, even while gaming. Click above to change it. Keyboard keys and
+            Mouse 4 / 5 are supported.
           </p>
 
           <div class="room-facts">
@@ -212,7 +216,7 @@
       </div>
 
       <footer>
-        <span id="footer-status">Open Chat, join a room, and allow local access…</span>
+        <span id="footer-status" role="status">Connecting to the companion service…</span>
         <button type="button" id="refresh-button">Refresh</button>
       </footer>
     </main>

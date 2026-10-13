@@ -92,6 +92,8 @@ describe('companion installer lifecycle', () => {
     expect(fixture).toContain('navigator.mediaDevices.getUserMedia');
     expect(fixture).toContain('new RTCPeerConnection()');
     expect(fixture).toContain('HTMLMediaElement.prototype.captureStream');
+    expect(fixture).toContain('await verifySettings()');
+    expect(fixture).toContain("window.chrome.webview.postMessage('smoke-settings')");
     expect(fixture).toContain("new WebSocket('ws://127.0.0.1:7331')");
     expect(fixture).toContain("companionMarker?.host === 'webview2'");
     expect(fixture).toContain("companionMarker?.platform === 'windows'");

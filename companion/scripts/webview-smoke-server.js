@@ -92,7 +92,8 @@ const html = `<!doctype html>
             'A fake media track is not live.',
           );
         } finally {
-          stream.getTracks().forEach((track) => track.stop());
+          window.__companionSmokeStream = stream;
+          window.addEventListener('pagehide', () => stream.getTracks().forEach((track) => track.stop()), { once: true });
         }
 
         const peer = new RTCPeerConnection();
@@ -143,6 +144,7 @@ const html = `<!doctype html>
           window.location.href === ${JSON.stringify(TARGET_URL)},
           'The native handoff loaded an unexpected room URL.',
         );
+        await verifySettings();
         await reportSmokeResult({ status: 'passed', url: window.location.href });
         document.documentElement.dataset.smokeStatus = 'ok';
         status.textContent = 'Native cold-start handoff preserved path, query, and hash.';
@@ -156,6 +158,19 @@ const html = `<!doctype html>
           body: JSON.stringify(payload),
         });
         if (!response.ok) throw new Error('The smoke fixture rejected the browser result.');
+      }
+
+      function verifySettings() {
+        return withTimeout(new Promise((resolve, reject) => {
+          const listener = (event) => {
+            if (event.data !== 'settings-preserved' && event.data !== 'settings-failed') return;
+            window.chrome.webview.removeEventListener('message', listener);
+            if (event.data === 'settings-preserved') resolve();
+            else reject(new Error('Opening Settings interrupted the room or its media.'));
+          };
+          window.chrome.webview.addEventListener('message', listener);
+          window.chrome.webview.postMessage('smoke-settings');
+        }), 30_000, 'Timed out checking Settings without leaving the room.');
       }
 
       function companionHello() {

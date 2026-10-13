@@ -384,7 +384,7 @@ internal sealed class CompanionWindow : Form
     private readonly string? smokeExpectedTitle;
     private readonly WebView2 browser;
     private readonly ToolStripButton backButton = CreateToolbarButton("Back");
-    private readonly ToolStripButton homeButton = CreateToolbarButton("Home / Chat");
+    private readonly ToolStripButton homeButton = CreateToolbarButton("Chat");
     private readonly ToolStripButton settingsButton = CreateToolbarButton("Settings");
     private readonly ToolStripButton reloadButton = CreateToolbarButton("Reload");
     private readonly HttpClient healthClient = new(
@@ -406,6 +406,7 @@ internal sealed class CompanionWindow : Form
     private bool browserReady;
     private bool checkingHealth;
     private bool openingClient;
+    private Form? settingsWindow;
     private int failedHealthChecks;
 
     internal bool InitializationFailed { get; private set; }
@@ -478,7 +479,7 @@ internal sealed class CompanionWindow : Form
             if (browser.CoreWebView2?.CanGoBack == true) browser.CoreWebView2.GoBack();
         };
         homeButton.Click += async (_, _) => await OpenClientFromConfig(showErrors: true);
-        settingsButton.Click += (_, _) => NavigateInWindow(uiUri);
+        settingsButton.Click += async (_, _) => await OpenSettings();
         reloadButton.Click += (_, _) => browser.CoreWebView2?.Reload();
         Shown += async (_, _) =>
         {
@@ -550,7 +551,23 @@ internal sealed class CompanionWindow : Form
                 {
                     return;
                 }
-                if (message == "open-client") await OpenClientFromConfig(showErrors: true);
+                if (message == "open-client" && IsSameOrigin(args.Source, uiUri))
+                {
+                    await OpenClientFromConfig(showErrors: true);
+                }
+                if (message == "smoke-settings" && smokeTest && webAppUri is not null &&
+                    IsSameOrigin(args.Source, webAppUri))
+                {
+                    try
+                    {
+                        await VerifySettingsKeepsRoomAlive();
+                        core.PostWebMessageAsString("settings-preserved");
+                    }
+                    catch
+                    {
+                        core.PostWebMessageAsString("settings-failed");
+                    }
+                }
             };
             core.HistoryChanged += (_, _) => UpdateToolbar();
             core.NavigationCompleted += (_, _) => UpdateToolbar();
@@ -1044,7 +1061,14 @@ internal sealed class CompanionWindow : Form
         try
         {
             var destination = await GetClientDestination(strict: true);
-            NavigateInWindow(destination);
+            // Returning from Settings must keep the current room and its media alive.
+            if (webAppUri is null || browser.Source is not { } current ||
+                !IsSameOrigin(current, destination))
+            {
+                NavigateInWindow(destination);
+            }
+            settingsWindow?.Close();
+            RestoreAndForeground();
         }
         catch (Exception error)
         {
@@ -1061,6 +1085,104 @@ internal sealed class CompanionWindow : Form
         finally
         {
             openingClient = false;
+        }
+    }
+
+    private async Task OpenSettings()
+    {
+        if (IsDisposed || browser.CoreWebView2 is null) return;
+        if (settingsWindow is { IsDisposed: false })
+        {
+            settingsWindow.Activate();
+            return;
+        }
+        if (browser.Source is not null && IsSameOrigin(browser.Source, uiUri))
+        {
+            RestoreAndForeground();
+            return;
+        }
+
+        var window = new Form
+        {
+            Text = "Settings — LiveKit Companion",
+            StartPosition = FormStartPosition.CenterParent,
+            ClientSize = new Size(1000, 760),
+            MinimumSize = new Size(640, 600),
+            BackColor = BackColor,
+            Icon = Icon,
+        };
+        var settingsBrowser = new WebView2
+        {
+            Dock = DockStyle.Fill,
+            DefaultBackgroundColor = BackColor,
+        };
+        window.Controls.Add(settingsBrowser);
+        settingsWindow = window;
+        window.FormClosed += (_, _) => settingsWindow = null;
+        window.Show(this);
+        try
+        {
+            await settingsBrowser.EnsureCoreWebView2Async(browser.CoreWebView2.Environment)
+                .WaitAsync(TimeSpan.FromSeconds(20));
+            if (window.IsDisposed) return;
+            var core = settingsBrowser.CoreWebView2;
+            core.Settings.IsStatusBarEnabled = false;
+            core.Settings.AreDevToolsEnabled = false;
+            await InjectCompanionMarker(core);
+            core.NavigationStarting += (_, args) =>
+            {
+                if (IsSameOrigin(args.Uri, uiUri)) return;
+                args.Cancel = true;
+                OpenExternal(args.Uri);
+            };
+            core.NewWindowRequested += (_, args) =>
+            {
+                args.Handled = true;
+                OpenExternal(args.Uri);
+            };
+            core.PermissionRequested += (_, args) =>
+            {
+                args.SavesInProfile = false;
+                args.State = CoreWebView2PermissionState.Deny;
+            };
+            core.ScreenCaptureStarting += (_, args) => args.Cancel = true;
+            core.WebMessageReceived += async (_, args) =>
+            {
+                if (!IsSameOrigin(args.Source, uiUri)) return;
+                string message;
+                try { message = args.TryGetWebMessageAsString(); }
+                catch { return; }
+                if (message == "open-client") await OpenClientFromConfig(showErrors: true);
+            };
+            var loaded = new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            core.NavigationCompleted += (_, args) => loaded.TrySetResult(args);
+            core.Navigate(uiUri.AbsoluteUri);
+            var result = await loaded.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            if (!result.IsSuccess) throw new InvalidOperationException("The settings page did not load.");
+        }
+        catch (Exception error)
+        {
+            if (window.IsDisposed) return;
+            window.Close();
+            if (smokeTest) throw;
+            MessageBox.Show(this, $"Could not open Settings.\n\n{error.Message}",
+                "LiveKit Companion", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private async Task VerifySettingsKeepsRoomAlive()
+    {
+        await browser.CoreWebView2.ExecuteScriptAsync("window.__settingsSurvivalProbe = true");
+        await OpenSettings();
+        if (settingsWindow is null) throw new InvalidOperationException("Settings did not open.");
+        await OpenClientFromConfig(showErrors: false);
+        var survived = await browser.CoreWebView2.ExecuteScriptAsync(
+            "window.__settingsSurvivalProbe === true && " +
+            "window.__companionSmokeStream?.getTracks().every(track => track.readyState === 'live')");
+        if (survived != "true")
+        {
+            throw new InvalidOperationException("Opening Settings interrupted the room or its media.");
         }
     }
 

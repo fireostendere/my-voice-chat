@@ -19,7 +19,7 @@ browser or the Windows Companion's WebView2 and talking WebRTC directly to LiveK
                           │       Browser or Companion WebView2       │
                           │                                           │
   app/page.tsx  ────────► │  PageClientImpl / VideoConferenceClient   │
-  (tabbed launcher)       │     • livekit-client Room                 │
+  (room launcher)         │     • livekit-client Room                 │
                           │     • <VideoConference/> prefab UI        │
                           │     • E2EE worker, perf optimizer         │
                           └───────┬─────────────────────────┬─────────┘
@@ -41,17 +41,17 @@ browser or the Windows Companion's WebView2 and talking WebRTC directly to LiveK
 
 ## Routes
 
-| Path                                       | Type   | Responsibility                                                                                                                                                                                                      |
-| ------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app/page.tsx`                             | client | Landing page. Tabbed launcher: **Demo** (generates a random room id, optional E2EE) and **Custom** (paste a server URL + token). It only navigates to the room route; the destination performs Companion detection. |
-| `app/rooms/[roomName]/page.tsx`            | server | Parses `region`/`hq`/`codec`/`singlePC`, then places `PageClientImpl` behind `CompanionRouteGate` so handoff finishes before browser room setup.                                                                    |
-| `app/rooms/[roomName]/PageClientImpl.tsx`  | client | The **managed** flow: shows `<PreJoin/>`, fetches a token from `connection-details`, builds the `Room`, and renders the conference.                                                                                 |
-| `app/custom/page.tsx`                      | server | Validates `liveKitUrl`/`token`/`codec`, then gates `VideoConferenceClientImpl` before its automatic connection can start.                                                                                           |
-| `app/custom/VideoConferenceClientImpl.tsx` | client | The **bring-your-own-token** flow: builds the `Room` directly from URL-provided credentials. No PreJoin, no token fetch.                                                                                            |
-| `app/api/connection-details/route.ts`      | server | `GET` → mints a short-lived participant JWT for `{roomName, participantName}`, optionally region-routed.                                                                                                            |
-| `app/api/record/start/route.ts`            | server | `GET` → starts a Room Composite Egress to S3 (speaker layout, mp4).                                                                                                                                                 |
-| `app/api/record/stop/route.ts`             | server | `GET` → stops all active egresses for the room.                                                                                                                                                                     |
-| `app/api/companion/download/route.ts`      | server | `GET` → redirects to the Windows companion EXE release or a configured HTTPS mirror.                                                                                                                                |
+| Path                                       | Type   | Responsibility                                                                                                                                                                       |
+| ------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `app/page.tsx`                             | client | Landing page. Create a voice room with optional E2EE, join a same-site invitation or room name, or use the **Custom server** tab. Only the destination performs Companion detection. |
+| `app/rooms/[roomName]/page.tsx`            | server | Parses `region`/`hq`/`codec`/`singlePC`, then places `PageClientImpl` behind `CompanionRouteGate` so handoff finishes before browser room setup.                                     |
+| `app/rooms/[roomName]/PageClientImpl.tsx`  | client | The **managed** flow: shows `<PreJoin/>`, fetches a token from `connection-details`, builds the `Room`, and renders the conference.                                                  |
+| `app/custom/page.tsx`                      | server | Validates `liveKitUrl`/`token`/`codec`, then gates `VideoConferenceClientImpl` before its automatic connection can start.                                                            |
+| `app/custom/VideoConferenceClientImpl.tsx` | client | The **bring-your-own-token** flow: builds the `Room` directly from URL-provided credentials. No PreJoin, no token fetch.                                                             |
+| `app/api/connection-details/route.ts`      | server | `GET` → mints a short-lived participant JWT for `{roomName, participantName}`, optionally region-routed.                                                                             |
+| `app/api/record/start/route.ts`            | server | `GET` → starts a Room Composite Egress to S3 (speaker layout, mp4).                                                                                                                  |
+| `app/api/record/stop/route.ts`             | server | `GET` → stops all active egresses for the room.                                                                                                                                      |
+| `app/api/companion/download/route.ts`      | server | `GET` → redirects to the Windows companion EXE release or a configured HTTPS mirror.                                                                                                 |
 
 ## `lib/` modules
 
@@ -63,7 +63,7 @@ browser or the Windows Companion's WebView2 and talking WebRTC directly to LiveK
 | `useSetupE2EE.ts`                                   | Reads the passphrase from `location.hash` and spins up the `livekit-client/e2ee-worker` Web Worker.                                                                        |
 | `usePerfomanceOptimiser.ts`                         | `useLowCPUOptimizer` — listens for `LocalTrackCpuConstrained` and degrades publisher/subscriber video quality.                                                             |
 | `SettingsMenu.tsx`                                  | In-room settings drawer (Media / Recording tabs). Gated by `NEXT_PUBLIC_SHOW_SETTINGS_MENU`.                                                                               |
-| `CustomVideoConference.tsx`                         | Conference layout with participant volume controls, custom chat, and the watch-together cinema stage.                                                                      |
+| `CustomVideoConference.tsx`                         | Conference layout with a room/status/invite toolbar, PTT state, participant volume controls, custom chat, and the cinema stage.                                            |
 | `companionNavigation.ts` / `CompanionRouteGate.tsx` | Browser-side, strictly loopback Companion probe and pre-room native handoff; keeps the browser client unmounted once an `open-room` command has been sent.                 |
 | `CompanionUpdatePrompt.tsx` / `companionVersion.ts` | Compares the installed desktop semver with the version shipped by the site and offers the rolling installer when the desktop client is older.                              |
 | `watchTogether/**`                                  | Cinema source picker, synchronized URL/HLS/YouTube/VK players, and host-side local-file/torrent publication through LiveKit screen-share tracks.                           |
@@ -75,8 +75,11 @@ browser or the Windows Companion's WebView2 and talking WebRTC directly to LiveK
 
 ## Connection lifecycle (managed flow)
 
-`PageClientImpl` is the reference implementation. The custom flow is a simplified
-version of the same steps.
+Both clients share `useRoomConnection`. Managed rooms show PreJoin with camera off
+by default (saved device choices still apply); custom rooms join with audio only.
+Token requests check response status and credentials, time out after 15 seconds,
+prevent duplicate submissions, and abort on unmount. Failed managed joins can retry
+with a fresh token. Custom joins retry with the supplied token.
 
 ```
 PreJoin (username, mic/cam choices)
@@ -97,7 +100,7 @@ room.connect(serverUrl, token)   ← after E2EE setup completes
    │
    ├─ setCameraEnabled / setMicrophoneEnabled per PreJoin choices
    ├─ useLowCPUOptimizer(room)   ← degrade quality under CPU pressure
-   └─ RoomEvent.Disconnected → router.push('/')
+   └─ intentional leave → home; unexpected disconnect → retry UI
    ▼
 <RoomContext.Provider value={room}>
    <VideoConference/>  +  KeyboardShortcuts, DebugMode, RecordingIndicator, (SettingsMenu)
@@ -123,7 +126,8 @@ Key `RoomOptions` decisions (`PageClientImpl.tsx`):
   into the worker; `room.setE2EEEnabled(true)` activates insertable-streams encryption.
 - This requires cross-origin isolation, which is why `next.config.js` sets
   `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: credentialless`.
-- Unsupported browsers raise `DeviceUnsupportedError`, surfaced to the user via an alert.
+- Encryption setup is awaited before connecting. Failures keep the client disconnected
+  and show the retry UI; the client never continues with an unencrypted connection.
 - **Encrypted rooms cannot be recorded** (Egress cannot decrypt the media).
 
 ## Recording (Egress)
@@ -249,9 +253,10 @@ loopback server so the native launcher can discover its destination; every mutat
 still requires the in-memory UI token and exact localhost `Origin`.
 Desktop, Start-menu, post-install, and autostart entries all target
 `LiveKitCompanion.exe`; the launcher starts the bundled Node process directly and hosts
-the configured voice-chat web app in its own WebView2 window. A small native toolbar
-switches between Chat and the localhost Settings page while keeping all other origins
-in the system browser. The taskbar owner and icon are therefore the Companion rather
+the configured voice-chat web app in its own WebView2 window. A small native toolbar opens localhost Settings in a separate owned WebView2 window,
+keeping the room and its media alive. Chat returns to the current room without
+reloading it; changing the configured origin still navigates to the new client.
+All other origins open in the system browser. The taskbar owner and icon are therefore the Companion rather
 than the default browser. No CMD or VBS launcher is installed. The installer bootstraps
 the official WebView2 Runtime only when it is absent. The internal helper owns the
 LiveKit tray icon and can request an orderly Node shutdown.
@@ -297,8 +302,15 @@ precedence for managed installations and CI. The Windows smoke test installs the
 EXE, starts a cross-origin-isolated loopback fixture, and opens that fixture in the real
 WebView2 control with fake camera and microphone devices. Success requires secure
 context and cross-origin isolation, `getUserMedia`, WebRTC, media `captureStream()`, the
-native host marker, a `ptt` + `torrent` + `open-room` capability handshake, and a real
-same-window room navigation that preserves path, query, and fragment.
+native host marker, a `ptt` + `torrent` + `open-room` capability handshake, a real
+same-window room navigation that preserves path, query, and fragment, and a Settings
+open/return that preserves the room document and live fake media tracks.
+
+The settings panel reports actual service availability, disables stale controls on an
+outage, and recovers automatically. An expired settings token after a service restart
+requires a page reload. Polling preserves the selected room and focused origin controls;
+pending torrent/settings requests stay disabled. Web PTT mutes on companion loss and
+on cleanup, including when microphone capture completes after key release.
 
 The PTT helper polls only the configured Windows virtual key. It replaces the previous
 third-party global keyboard hook and does not enumerate other keys or collect typed

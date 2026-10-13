@@ -28,6 +28,8 @@ const playbackStop = document.querySelector('#playback-stop');
 const footerStatus = document.querySelector('#footer-status');
 const refreshButton = document.querySelector('#refresh-button');
 const toast = document.querySelector('#toast');
+const serviceState = document.querySelector('#service-state');
+const openChatButton = document.querySelector('#open-chat-button');
 
 let rooms = [];
 let approvedOrigins = [];
@@ -43,10 +45,17 @@ let capturingKey = false;
 let savingKey = false;
 let seeking = false;
 let playbackBusy = false;
+let serviceOnline = false;
+let sessionExpired = false;
+let statusRequest = null;
+let savingServer = false;
+let sendingTorrent = false;
+let renderedOrigins = '';
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
     ...options,
+    signal: options.signal || AbortSignal.timeout(8000),
     headers: {
       'Content-Type': 'application/json',
       'X-Companion-Token': token,
@@ -54,14 +63,29 @@ async function api(path, options = {}) {
     },
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok)
-    throw new Error(body.error || body.message || `Request failed (${response.status})`);
+  if (!response.ok) {
+    const error = new Error(body.error || body.message || `Request failed (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
   return body;
 }
 
-async function refreshStatus({ quiet = false } = {}) {
+function refreshStatus({ quiet = false } = {}) {
+  if (statusRequest) return statusRequest;
+  statusRequest = loadStatus(quiet).finally(() => {
+    statusRequest = null;
+  });
+  return statusRequest;
+}
+
+async function loadStatus(quiet) {
   try {
     const status = await api('/api/status');
+    serviceOnline = true;
+    sessionExpired = false;
+    serviceState.dataset.state = 'online';
+    serviceState.querySelector('strong').textContent = 'ONLINE';
     rooms = status.rooms;
     approvedOrigins = status.approvedOrigins || [];
     originsManaged = status.originsManaged === true;
@@ -72,27 +96,45 @@ async function refreshStatus({ quiet = false } = {}) {
     renderKeys(status.supportedKeys, status.pttKey);
     if (!quiet) showToast('Companion status refreshed.');
   } catch (error) {
-    footerStatus.textContent = 'Companion UI lost connection.';
-    showToast(error.message, true);
+    const wasOnline = serviceOnline;
+    serviceOnline = false;
+    sessionExpired = error.status === 403;
+    serviceState.dataset.state = 'offline';
+    serviceState.querySelector('strong').textContent = 'OFFLINE';
+    rooms = [];
+    cancelKeyCapture();
+    renderRooms();
+    renderOrigins();
+    renderIdleKeyBinding();
+    footerStatus.textContent = sessionExpired
+      ? 'The service restarted. Reload settings to reconnect.'
+      : 'Service unavailable. Reconnecting automatically…';
+    refreshButton.textContent = sessionExpired ? 'Reload settings' : 'Retry now';
+    if (wasOnline || !quiet) showToast(error.message, true);
   }
 }
 
 function renderRooms() {
   const previous = roomSelect.value;
-  roomSelect.replaceChildren();
+  const options = rooms.length
+    ? rooms.map((room) => [`${room.roomName} · ${room.participantIdentity}`, room.id])
+    : [[serviceOnline ? 'No active rooms' : 'Service disconnected', '']];
+  if (
+    JSON.stringify(options) !==
+    JSON.stringify(Array.from(roomSelect.options, (option) => [option.text, option.value]))
+  ) {
+    roomSelect.replaceChildren(...options.map(([label, value]) => new Option(label, value)));
+  }
   if (rooms.length === 0) {
-    roomSelect.add(new Option('No active rooms', ''));
     roomSelect.disabled = true;
     footerStatus.textContent = 'Open Chat, join a room, and allow its local-network access prompt.';
   } else {
-    for (const room of rooms) {
-      roomSelect.add(new Option(`${room.roomName} · ${room.participantIdentity}`, room.id));
-    }
     roomSelect.disabled = false;
     if (rooms.some((room) => room.id === previous)) roomSelect.value = previous;
     footerStatus.textContent = `${rooms.length} active room${rooms.length === 1 ? '' : 's'} connected.`;
   }
   roomCount.textContent = String(rooms.length);
+  refreshButton.textContent = 'Refresh';
   updatePlayButton();
   renderPlayback();
 }
@@ -106,12 +148,23 @@ function renderKeys(keys, currentKey) {
 }
 
 function renderOrigins() {
-  approvedOriginList.replaceChildren();
   const configurationManaged = originsManaged || webAppManaged;
   connectionMode.textContent = configurationManaged ? 'MANAGED' : 'DESKTOP';
   connectionMode.classList.toggle('managed', configurationManaged);
-  serverOriginInput.disabled = configurationManaged;
-  saveOriginButton.disabled = configurationManaged;
+  serverOriginInput.disabled = configurationManaged || savingServer || !serviceOnline;
+  saveOriginButton.disabled = configurationManaged || savingServer || !serviceOnline;
+  openChatButton.disabled = !webAppUrl;
+  const signature = JSON.stringify([
+    approvedOrigins,
+    originsManaged,
+    webAppManaged,
+    webAppUrl,
+    serviceOnline,
+    savingServer,
+  ]);
+  if (signature === renderedOrigins) return;
+  renderedOrigins = signature;
+  approvedOriginList.replaceChildren();
 
   if (approvedOrigins.length === 0) {
     const empty = document.createElement('span');
@@ -145,6 +198,7 @@ function renderOrigins() {
     openButton.dataset.originAction = selected ? 'open' : 'use';
     openButton.dataset.origin = origin;
     openButton.textContent = selected ? 'OPEN CHAT' : 'USE IN APP';
+    openButton.disabled = !selected && (configurationManaged || savingServer || !serviceOnline);
     row.append(indicator, label, openButton);
 
     if (!originsManaged) {
@@ -153,6 +207,7 @@ function renderOrigins() {
       removeButton.dataset.originAction = 'remove';
       removeButton.dataset.origin = origin;
       removeButton.textContent = 'REMOVE';
+      removeButton.disabled = savingServer || !serviceOnline;
       row.append(removeButton);
     }
     approvedOriginList.append(row);
@@ -161,8 +216,9 @@ function renderOrigins() {
 
 async function saveWebApp() {
   const url = serverOriginInput.value.trim();
-  if (!url || originsManaged || webAppManaged) return;
-  saveOriginButton.disabled = true;
+  if (!url || originsManaged || webAppManaged || savingServer || !serviceOnline) return;
+  savingServer = true;
+  renderOrigins();
   saveOriginButton.querySelector('span').textContent = 'Connecting…';
   try {
     const result = await api('/api/settings/web-app', {
@@ -179,12 +235,15 @@ async function saveWebApp() {
     showToast(error.message, true);
   } finally {
     saveOriginButton.querySelector('span').textContent = 'Connect in app';
-    saveOriginButton.disabled = originsManaged || webAppManaged;
+    savingServer = false;
+    renderOrigins();
   }
 }
 
 async function selectWebApp(url) {
-  if (webAppManaged) return;
+  if (webAppManaged || originsManaged || savingServer || !serviceOnline) return;
+  savingServer = true;
+  renderOrigins();
   try {
     const result = await api('/api/settings/web-app', {
       method: 'PUT',
@@ -197,6 +256,9 @@ async function selectWebApp(url) {
     openWebApp();
   } catch (error) {
     showToast(error.message, true);
+  } finally {
+    savingServer = false;
+    renderOrigins();
   }
 }
 
@@ -210,7 +272,9 @@ function openWebApp() {
 }
 
 async function removeOrigin(origin) {
-  if (originsManaged) return;
+  if (originsManaged || savingServer || !serviceOnline) return;
+  savingServer = true;
+  renderOrigins();
   try {
     const result = await api('/api/settings/origin', {
       method: 'DELETE',
@@ -222,6 +286,9 @@ async function removeOrigin(origin) {
     showToast(`${result.origin} was removed from trusted servers.`);
   } catch (error) {
     showToast(error.message, true);
+  } finally {
+    savingServer = false;
+    renderOrigins();
   }
 }
 
@@ -277,7 +344,7 @@ function selectedRoom() {
 
 function updatePlayButton() {
   const hasSource = Boolean(selectedFile || magnetInput.value.trim());
-  playButton.disabled = !roomSelect.value || !hasSource;
+  playButton.disabled = !serviceOnline || sendingTorrent || !roomSelect.value || !hasSource;
 }
 
 function chooseFile(file) {
@@ -298,8 +365,13 @@ function chooseFile(file) {
 
 async function playTorrent() {
   const roomId = roomSelect.value;
-  if (!roomId) return;
-  playButton.disabled = true;
+  if (!roomId || !serviceOnline || sendingTorrent || (!selectedFile && !magnetInput.value.trim()))
+    return;
+  sendingTorrent = true;
+  updatePlayButton();
+  dropZone.disabled = true;
+  fileInput.disabled = true;
+  magnetInput.disabled = true;
   playButton.querySelector('span').textContent = 'Sending…';
   try {
     const input = selectedFile
@@ -326,6 +398,10 @@ async function playTorrent() {
   } catch (error) {
     showToast(error.message, true);
   } finally {
+    sendingTorrent = false;
+    dropZone.disabled = false;
+    fileInput.disabled = false;
+    magnetInput.disabled = false;
     playButton.querySelector('span').textContent = 'Send to active room';
     updatePlayButton();
   }
@@ -333,7 +409,7 @@ async function playTorrent() {
 
 async function sendPlaybackCommand(action, currentTime) {
   const roomId = roomSelect.value;
-  if (!roomId || playbackBusy) return;
+  if (!roomId || playbackBusy || !serviceOnline) return;
   playbackBusy = true;
   renderPlayback();
   try {
@@ -354,7 +430,7 @@ async function sendPlaybackCommand(action, currentTime) {
 }
 
 async function applyCapturedKey(key) {
-  if (!capturingKey || savingKey) return;
+  if (!capturingKey || savingKey || !serviceOnline) return;
   if (!supportedPttKeys.has(key)) {
     showUnsupportedKey();
     return;
@@ -388,7 +464,7 @@ async function applyCapturedKey(key) {
 }
 
 function toggleKeyCapture() {
-  if (savingKey) return;
+  if (savingKey || !serviceOnline) return;
   if (capturingKey) {
     cancelKeyCapture(true);
     return;
@@ -417,7 +493,7 @@ function renderIdleKeyBinding() {
   keyCaptureButton.classList.remove('capturing', 'saving', 'capture-error');
   keyCaptureButton.setAttribute('aria-pressed', 'false');
   keyCaptureButton.removeAttribute('aria-busy');
-  keyCaptureButton.disabled = supportedPttKeys.size === 0;
+  keyCaptureButton.disabled = !serviceOnline || supportedPttKeys.size === 0;
   keyCaptureState.textContent = 'ACTIVE BIND';
   keyDisplay.textContent = displayKeyName(configuredPttKey);
   keyCaptureLabel.textContent = 'Click, then press a key';
@@ -630,7 +706,11 @@ playbackSeek.addEventListener('change', () => {
   void sendPlaybackCommand('seek', currentTime);
 });
 playButton.addEventListener('click', playTorrent);
-refreshButton.addEventListener('click', () => refreshStatus());
+refreshButton.addEventListener('click', () => {
+  if (sessionExpired) window.location.reload();
+  else void refreshStatus();
+});
+openChatButton.addEventListener('click', openWebApp);
 
 refreshStatus({ quiet: true });
 setInterval(() => refreshStatus({ quiet: true }), 1000);

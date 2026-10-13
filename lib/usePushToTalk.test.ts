@@ -104,6 +104,8 @@ describe('usePushToTalk', () => {
 
     act(() => ws.emit({ type: 'other' }));
     act(() => ws.onmessage?.({ data: 'not-json' }));
+    act(() => ws.emit(null));
+    act(() => ws.emit({ type: 'ptt', state: 'invalid' }));
     expect(setMicrophoneEnabled).not.toHaveBeenCalled();
     expect(result.current.talking).toBe(false);
   });
@@ -149,5 +151,49 @@ describe('usePushToTalk', () => {
     const { room } = makeRoom();
     renderHook(() => usePushToTalk(room));
     expect(FakeWebSocket.instances).toHaveLength(0);
+  });
+
+  it('mutes on connection loss and reports recovery without opening the mic', () => {
+    const { room, setMicrophoneEnabled } = makeRoom();
+    const { result } = renderHook(() => usePushToTalk(room));
+    const ws = FakeWebSocket.instances[0];
+    act(() => ws.open());
+    act(() => ws.emit({ type: 'ptt', state: 'down' }));
+    act(() => ws.close());
+    expect(setMicrophoneEnabled).toHaveBeenLastCalledWith(false);
+    expect(result.current).toEqual({ connected: false, talking: false, interrupted: true });
+  });
+
+  it('re-mutes when capture finishes after the talk key was released', async () => {
+    const { room, setMicrophoneEnabled } = makeRoom();
+    renderHook(() => usePushToTalk(room));
+    const ws = FakeWebSocket.instances[0];
+    act(() => ws.open());
+    let finishCapture!: () => void;
+    setMicrophoneEnabled.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishCapture = resolve;
+        }),
+    );
+    act(() => ws.emit({ type: 'ptt', state: 'down' }));
+    act(() => ws.emit({ type: 'ptt', state: 'up' }));
+    setMicrophoneEnabled.mockClear();
+    await act(async () => finishCapture());
+    expect(setMicrophoneEnabled).toHaveBeenLastCalledWith(false);
+  });
+
+  it('mutes and releases its socket and retry timer on unmount', () => {
+    vi.useFakeTimers();
+    const { room, setMicrophoneEnabled } = makeRoom();
+    const { unmount } = renderHook(() => usePushToTalk(room));
+    const ws = FakeWebSocket.instances[0];
+    act(() => ws.open());
+    act(() => ws.emit({ type: 'ptt', state: 'down' }));
+    unmount();
+    expect(setMicrophoneEnabled).toHaveBeenLastCalledWith(false);
+    expect(ws.close).toHaveBeenCalledOnce();
+    act(() => vi.advanceTimersByTime(6000));
+    expect(FakeWebSocket.instances).toHaveLength(1);
   });
 });
