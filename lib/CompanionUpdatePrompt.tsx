@@ -61,7 +61,7 @@ export function CompanionUpdatePrompt({ latestVersion }: { latestVersion: string
             : '. Your installed version needs to be refreshed.'}
         </p>
         <div className={styles.actions}>
-          <a href="/api/companion/download" onClick={dismiss}>
+          <a href="/api/companion/download" download onClick={dismiss}>
             Download update
           </a>
           <button type="button" onClick={dismiss}>

@@ -13,7 +13,11 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => ({ get: () => params.tab }),
 }));
 vi.mock('@/lib/CompanionDownloadLink', () => ({
-  CompanionDownloadLink: () => <a href="/api/companion/download">Download companion</a>,
+  CompanionDownloadLink: () => (
+    <a href="/api/companion/download" download>
+      Download companion
+    </a>
+  ),
 }));
 
 beforeEach(() => {

@@ -30,6 +30,7 @@ export function CompanionDownloadLink({
         .filter(Boolean)
         .join(' ')}
       href="/api/companion/download"
+      download
     >
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M12 3v11m0 0 4-4m-4 4-4-4M5 18h14" />
