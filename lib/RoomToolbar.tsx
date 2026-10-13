@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useConnectionState, useParticipants, useRoomContext } from '@livekit/components-react';
 import { ConnectionState } from 'livekit-client';
 import toast from 'react-hot-toast';
+import { managedRoomPathname } from './client-utils';
 
 export function RoomToolbar() {
   const room = useRoomContext();
@@ -15,7 +16,7 @@ export function RoomToolbar() {
   async function copyInvite() {
     if (copying) return;
     // Custom room URLs carry a participant token and must never become invitations.
-    if (!/^\/rooms\/[^/]+\/?$/.test(window.location.pathname)) {
+    if (!managedRoomPathname(window.location.pathname)) {
       toast.error('Use a separate access token for each participant on a custom server.');
       return;
     }

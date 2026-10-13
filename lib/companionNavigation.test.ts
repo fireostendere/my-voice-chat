@@ -48,31 +48,34 @@ beforeEach(() => {
 });
 
 describe('openRoomInCompanion', () => {
-  it('opens an absolute same-origin room after the advertised handshake', async () => {
-    const result = openRoomInCompanion('/rooms/cinema?hq=true#secret', socketOptions());
-    const socket = FakeWebSocket.instances[0];
+  it.each(['/rooms/cinema', '/cinema'])(
+    'opens %s in the existing Companion with the same room options and encryption',
+    async (pathname) => {
+      const result = openRoomInCompanion(`${pathname}?hq=true#secret`, socketOptions());
+      const socket = FakeWebSocket.instances[0];
 
-    socket.open();
-    expect(JSON.parse(socket.sent[0])).toEqual({ type: 'capabilities' });
+      socket.open();
+      expect(JSON.parse(socket.sent[0])).toEqual({ type: 'capabilities' });
 
-    socket.receive({ type: 'hello', version: 3, capabilities: ['ptt', 'open-room'] });
-    const command = JSON.parse(socket.sent[1]);
-    expect(command).toMatchObject({
-      type: 'open-room',
-      url: `${window.location.origin}/rooms/cinema?hq=true#secret`,
-    });
-    socket.receive({ type: 'hello', version: 3, capabilities: ['ptt', 'open-room'] });
-    expect(socket.sent).toHaveLength(2);
+      socket.receive({ type: 'hello', version: 3, capabilities: ['ptt', 'open-room'] });
+      const command = JSON.parse(socket.sent[1]);
+      expect(command).toMatchObject({
+        type: 'open-room',
+        url: `${window.location.origin}/rooms/cinema?hq=true#secret`,
+      });
+      socket.receive({ type: 'hello', version: 3, capabilities: ['ptt', 'open-room'] });
+      expect(socket.sent).toHaveLength(2);
 
-    socket.receive({
-      type: 'open-room-result',
-      requestId: command.requestId,
-      accepted: true,
-    });
+      socket.receive({
+        type: 'open-room-result',
+        requestId: command.requestId,
+        accepted: true,
+      });
 
-    await expect(result).resolves.toBe('accepted');
-    expect(socket.close).toHaveBeenCalledOnce();
-  });
+      await expect(result).resolves.toBe('accepted');
+      expect(socket.close).toHaveBeenCalledOnce();
+    },
+  );
 
   it('rejects old capabilities without sending an open command', async () => {
     const result = openRoomInCompanion('/custom?token=abc', socketOptions());
@@ -154,10 +157,13 @@ describe('openRoomInCompanion', () => {
     expect(FakeWebSocket.instances).toHaveLength(0);
   });
 
-  it('rejects same-origin pages that are not room routes', async () => {
-    await expect(openRoomInCompanion('/settings', socketOptions())).resolves.toBe('unavailable');
-    expect(FakeWebSocket.instances).toHaveLength(0);
-  });
+  it.each(['/api', '/settings/extra', '/favicon.ico'])(
+    'rejects non-room routes without connecting: %s',
+    async (pathname) => {
+      await expect(openRoomInCompanion(pathname, socketOptions())).resolves.toBe('unavailable');
+      expect(FakeWebSocket.instances).toHaveLength(0);
+    },
+  );
 
   it.each([
     'wss://remote.example/companion',

@@ -10,19 +10,33 @@ export function generateRoomId(): string {
   return `${randomString(4)}-${randomString(4)}`;
 }
 
+export function isShortRoomName(name: string): boolean {
+  return (
+    /^[\p{L}\p{N}_-]{1,128}$/u.test(name) &&
+    !['api', 'custom', 'rooms', '_next', 'rtc', 'twirp'].includes(name)
+  );
+}
+
+export function managedRoomPathname(pathname: string): string | null {
+  if (/^\/rooms\/[^/]+\/?$/.test(pathname)) return pathname;
+  const match = /^\/([^/]+)\/?$/.exec(pathname);
+  if (!match) return null;
+  try {
+    const name = decodeURIComponent(match[1]);
+    return isShortRoomName(name) ? `/rooms/${encodeURIComponent(name)}` : null;
+  } catch {
+    return null;
+  }
+}
+
 export function roomHrefFromInput(input: string, origin: string): string | null {
   const value = input.trim();
   if (/^[\p{L}\p{N}_-]{1,128}$/u.test(value)) return `/rooms/${encodeURIComponent(value)}`;
   try {
     const url = new URL(value, origin);
-    if (
-      url.origin !== origin ||
-      url.username ||
-      url.password ||
-      !/^\/rooms\/[^/]+\/?$/.test(url.pathname)
-    )
-      return null;
-    return `${url.pathname}${url.search}${url.hash}`;
+    const pathname = managedRoomPathname(url.pathname);
+    if (url.origin !== origin || url.username || url.password || !pathname) return null;
+    return `${pathname}${url.search}${url.hash}`;
   } catch {
     return null;
   }

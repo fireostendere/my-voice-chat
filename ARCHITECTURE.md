@@ -41,6 +41,11 @@ browser or the Windows Companion's WebView2 and talking WebRTC directly to LiveK
 
 ## Routes
 
+Short managed URLs such as `/dota` are served by `app/[roomName]/page.tsx`, which validates
+the name and reuses the `/rooms/[roomName]` page. Both addresses join the same LiveKit room.
+Short names allow letters, numbers, `_`, and `-` up to 128 characters; existing app, API,
+and media route names are reserved. The browser keeps the short URL, options, and E2EE hash.
+
 | Path                                       | Type   | Responsibility                                                                                                                                                                       |
 | ------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `app/page.tsx`                             | client | Landing page. Create a voice room with optional E2EE, join a same-site invitation or room name, or use the **Custom server** tab. Only the destination performs Companion detection. |
@@ -271,11 +276,13 @@ This lets the web UI compare versions without granting the remote page access to
 localhost Settings token.
 
 Room entry has a browser-to-native handoff before either LiveKit client mounts. The
-`CompanionRouteGate` on `/rooms/<roomName>` and `/custom` performs the check; the landing
+`CompanionRouteGate` on `/<roomName>`, `/rooms/<roomName>`, and `/custom` performs the check; the landing
 page merely navigates to one of those routes. Browser code accepts only a strictly
 loopback WebSocket URL and protocol v3 with the `open-room` capability. The Node service
 then compares the WebSocket upgrade `Origin`, requested URL origin, and selected client
 origin, and permits only exact same-origin `/rooms/<one-segment>` or `/custom` targets.
+The browser normalizes short room paths to `/rooms/<name>` before sending them, so existing
+installed clients accept them without changes to their route restrictions.
 For the handoff it sends bounded JSON to the single WinForms window through
 `\\.\pipe\LiveKitCompanion.Navigation.<UI_PORT>`. The pipe is restricted to the current
 Windows user, and WebView2 repeats scheme, credential, route, and exact-origin validation

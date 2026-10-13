@@ -1,5 +1,6 @@
 import { getCompanionNavigationWsUrl } from './companion';
 import { isCompanionWebView } from './companionMarker';
+import { managedRoomPathname } from './client-utils';
 
 export { isCompanionWebView } from './companionMarker';
 
@@ -33,9 +34,15 @@ export function openRoomInCompanion(
   } catch {
     return Promise.resolve('unavailable');
   }
-  if (url.origin !== window.location.origin || !isRoomRoute(url.pathname)) {
+  const managedPath = managedRoomPathname(url.pathname);
+  if (
+    url.origin !== window.location.origin ||
+    (!managedPath && url.pathname !== '/custom' && url.pathname !== '/custom/')
+  ) {
     return Promise.resolve('unavailable');
   }
+  // Installed clients accept the canonical managed route; keep query and E2EE hash intact.
+  if (managedPath) url.pathname = managedPath;
 
   const wsUrl = getLocalCompanionWsUrl(getCompanionNavigationWsUrl());
   if (!wsUrl) return Promise.resolve('unavailable');
@@ -134,10 +141,6 @@ export function openRoomInCompanion(
 
 function createRequestId(): string {
   return `open-room-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function isRoomRoute(pathname: string): boolean {
-  return /^\/rooms\/[^/]+\/?$/.test(pathname) || pathname === '/custom' || pathname === '/custom/';
 }
 
 function getLocalCompanionWsUrl(value: string): string | null {

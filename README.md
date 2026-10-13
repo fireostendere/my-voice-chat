@@ -169,7 +169,10 @@ not read from the Next.js `.env.local` file.
 
 ## Configuring a room via URL
 
-A managed room URL is `/rooms/<roomName>` and accepts:
+A managed room opens directly at `/<roomName>` (for example `/dota`). The existing
+`/rooms/<roomName>` address joins the same room. Short names allow letters, numbers,
+`_`, and `-` up to 128 characters; app, API, and media route names remain reserved.
+Both addresses accept:
 
 - `?hq=true` — high quality (2160p capture, 1080p/720p simulcast).
 - `?codec=vp9|vp8|h264|av1` — preferred video codec (default `vp9`).
@@ -257,7 +260,7 @@ available only to the configured app origin. The injected `window.__LIVEKIT_COMP
 marker lets the web UI identify the desktop host and compare its installed version without
 exposing any local Settings credentials.
 
-When a regular browser reaches a managed `/rooms/<roomName>` or custom `/custom` route,
+When a regular browser reaches a managed `/<roomName>`, `/rooms/<roomName>`, or custom `/custom` route,
 that route gates the LiveKit client before it can mount. Browser code probes only a
 loopback Companion WebSocket and requires protocol v3 plus the `open-room` capability;
 the landing page itself only navigates to the route. A running packaged Companion
@@ -294,7 +297,8 @@ server. An exact `COMPANION_ORIGINS` allowlist remains authoritative for managed
 installations and disables interactive origin changes.
 
 Room handoff is additionally restricted to exact same-origin `/rooms/<one-segment>` and
-`/custom` URLs. The full URL, including a possible custom JWT and E2EE hash, is never
+`/custom` URLs. Short room paths are normalized to `/rooms/<name>` before handoff, with
+query parameters and the E2EE hash preserved. The full URL, including a possible custom JWT and E2EE hash, is never
 placed in a process argument, file, or log: the Node service passes bounded JSON to the
 single WebView2 window through a current-user-only Windows named pipe, and the native
 client repeats the URL, route, and origin checks before navigating.

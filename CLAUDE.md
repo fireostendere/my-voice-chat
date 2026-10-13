@@ -67,6 +67,8 @@ Two ways to join a room, each with its own entry route and client component:
 - The landing page (`app/page.tsx`) creates voice rooms, joins same-site room invitations
   or names, and keeps custom server/token entry in a separate tab. It only navigates;
   Companion detection happens on the destination.
+- `app/[roomName]/page.tsx` serves short names such as `/dota` through the same managed
+  room page as `/rooms/dota`. App, API, and media route names remain reserved.
 - Both destination page shells wrap their client in `CompanionRouteGate`. The gate must
   resolve before either LiveKit client mounts, especially the auto-connecting custom flow.
 - Both client components build a `livekit-client` `Room` and use `useRoomConnection`
@@ -186,6 +188,8 @@ Room behavior is tuned through query/hash parameters rather than settings:
   hash can carry an E2EE passphrase. Validate WebSocket Origin = configured app origin =
   target origin, restrict paths to `/rooms/<name>` or `/custom`, and pass the full URL only
   through the bounded current-user named pipe. Never put it in argv, files, or logs.
+  The browser normalizes short room paths to `/rooms/<name>` before handoff, preserving
+  query parameters and the E2EE hash; installed clients keep their existing route checks.
 - **Cinema viewers do not own playback controls.** Only `embed.isHost` may receive
   playback commands, fullscreen, picture-in-picture, or stop actions. Keep direct viewer
   media controls hidden and unfocusable, YouTube at `controls=0`, and every viewer media

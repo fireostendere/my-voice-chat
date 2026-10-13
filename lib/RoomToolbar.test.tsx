@@ -13,15 +13,18 @@ vi.mock('@livekit/components-react', () => ({
 afterEach(() => window.history.replaceState({}, '', '/'));
 
 describe('room invitation', () => {
-  it('copies the full managed invitation, including room options and encryption', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal('navigator', { clipboard: { writeText } });
-    window.history.replaceState({}, '', '/rooms/friends?codec=vp8#secret');
-    render(<RoomToolbar />);
-    expect(screen.getByRole('status').textContent).toContain('2 in room');
-    fireEvent.click(screen.getByRole('button', { name: 'Invite' }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(window.location.href));
-  });
+  it.each(['/rooms/friends', '/friends'])(
+    'copies the full invitation at %s, including room options and encryption',
+    async (pathname) => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      vi.stubGlobal('navigator', { clipboard: { writeText } });
+      window.history.replaceState({}, '', `${pathname}?codec=vp8#secret`);
+      render(<RoomToolbar />);
+      expect(screen.getByRole('status').textContent).toContain('2 in room');
+      fireEvent.click(screen.getByRole('button', { name: 'Invite' }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(window.location.href));
+    },
+  );
 
   it('never copies a custom participant token as a shared invitation', () => {
     const writeText = vi.fn();
