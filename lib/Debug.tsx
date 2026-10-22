@@ -7,40 +7,57 @@ import { datadogLogs } from '@datadog/browser-logs';
 
 import styles from '../styles/Debug.module.css';
 
+type LogExtension = Parameters<typeof setLogExtension>[0];
+
+// livekit-client's setLogExtension wraps the current logger method factory and
+// has no way to unwrap it, so every call adds a permanent closure layer to every
+// LiveKit logger. Install one forwarding extension per page and only switch its
+// target when a room mounts or unmounts.
+let forwardingExtensionInstalled = false;
+let activeExtension: LogExtension | null = null;
+let datadogInitialised = false;
+
+function forwardToDatadog(...[level, msg, context]: Parameters<LogExtension>) {
+  switch (level) {
+    case LogLevel.debug:
+      datadogLogs.logger.debug(msg, context);
+      break;
+    case LogLevel.info:
+      datadogLogs.logger.info(msg, context);
+      break;
+    case LogLevel.warn:
+      datadogLogs.logger.warn(msg, context);
+      break;
+    case LogLevel.error:
+      datadogLogs.logger.error(msg, context);
+      break;
+    default:
+      break;
+  }
+}
+
+function enableDatadogForwarding(clientToken: string, site: string) {
+  if (!datadogInitialised) {
+    datadogInitialised = true;
+    console.log('setting up datadog logs');
+    datadogLogs.init({ clientToken, site, forwardErrorsToLogs: true, sessionSampleRate: 100 });
+  }
+  if (!forwardingExtensionInstalled) {
+    forwardingExtensionInstalled = true;
+    setLogExtension((level, msg, context) => activeExtension?.(level, msg, context));
+  }
+  activeExtension = forwardToDatadog;
+}
+
 export const useDebugMode = ({ logLevel }: { logLevel?: LogLevel }) => {
   const room = useRoomContext();
 
   React.useEffect(() => {
     setLogLevel(logLevel ?? 'debug');
 
-    if (process.env.NEXT_PUBLIC_DATADOG_CLIENT_TOKEN && process.env.NEXT_PUBLIC_DATADOG_SITE) {
-      console.log('setting up datadog logs');
-      datadogLogs.init({
-        clientToken: process.env.NEXT_PUBLIC_DATADOG_CLIENT_TOKEN,
-        site: process.env.NEXT_PUBLIC_DATADOG_SITE,
-        forwardErrorsToLogs: true,
-        sessionSampleRate: 100,
-      });
-
-      setLogExtension((level, msg, context) => {
-        switch (level) {
-          case LogLevel.debug:
-            datadogLogs.logger.debug(msg, context);
-            break;
-          case LogLevel.info:
-            datadogLogs.logger.info(msg, context);
-            break;
-          case LogLevel.warn:
-            datadogLogs.logger.warn(msg, context);
-            break;
-          case LogLevel.error:
-            datadogLogs.logger.error(msg, context);
-            break;
-          default:
-            break;
-        }
-      });
-    }
+    const clientToken = process.env.NEXT_PUBLIC_DATADOG_CLIENT_TOKEN;
+    const site = process.env.NEXT_PUBLIC_DATADOG_SITE;
+    if (clientToken && site) enableDatadogForwarding(clientToken, site);
 
     // @ts-expect-error
     window.__lk_room = room;
@@ -48,7 +65,8 @@ export const useDebugMode = ({ logLevel }: { logLevel?: LogLevel }) => {
     return () => {
       // @ts-expect-error
       window.__lk_room = undefined;
-      setLogExtension(() => {});
+      activeExtension = null;
+      setLogLevel(LogLevel.info);
     };
   }, [room, logLevel]);
 };
@@ -60,7 +78,17 @@ export const DebugMode = ({ logLevel }: { logLevel?: LogLevel }) => {
   const [roomSid, setRoomSid] = React.useState('');
 
   React.useEffect(() => {
-    room.getSid().then(setRoomSid);
+    let active = true;
+    // getSid rejects when the room leaves before the server assigns an id.
+    room
+      .getSid()
+      .then((sid) => {
+        if (active) setRoomSid(sid);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
   }, [room]);
 
   useDebugMode({ logLevel });
