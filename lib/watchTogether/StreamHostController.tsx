@@ -64,6 +64,9 @@ export function StreamHostController() {
     });
   }, [detail, error, reportStreamPlayback, status, streamSource]);
 
+  const reportPlaybackRef = React.useRef(reportPlayback);
+  reportPlaybackRef.current = reportPlayback;
+
   React.useEffect(() => {
     const video = videoRef.current;
     if (!streamSource || !video) return;
@@ -78,10 +81,11 @@ export function StreamHostController() {
       'seeked',
       'waiting',
     ];
-    events.forEach((event) => video.addEventListener(event, reportPlayback));
-    reportPlayback();
-    return () => events.forEach((event) => video.removeEventListener(event, reportPlayback));
-  }, [reportPlayback, streamSource]);
+    const onEvent = () => reportPlaybackRef.current();
+    events.forEach((event) => video.addEventListener(event, onEvent));
+    reportPlaybackRef.current();
+    return () => events.forEach((event) => video.removeEventListener(event, onEvent));
+  }, [streamSource]);
 
   React.useEffect(() => {
     const video = videoRef.current;
@@ -108,6 +112,7 @@ export function StreamHostController() {
     let cancelled = false;
     let objectUrl: string | null = null;
     let sourceCleanup = () => {};
+    let capturedStream: MediaStream | null = null;
     const abortController = new AbortController();
 
     const publish = async () => {
@@ -132,7 +137,7 @@ export function StreamHostController() {
           sourceName = prepared.fileName;
         }
 
-        await waitForMetadata(video);
+        await waitForMetadata(video, abortController.signal);
         if (cancelled) return;
 
         setStatus('Starting playback…');
@@ -142,12 +147,13 @@ export function StreamHostController() {
         });
         if (cancelled) return;
 
-        const mediaStream = (video as any).captureStream
+        const mediaStream: MediaStream | null = (video as any).captureStream
           ? (video as any).captureStream()
           : (video as any).mozCaptureStream?.();
         if (!mediaStream) {
           throw new Error('This browser cannot stream local video with captureStream().');
         }
+        capturedStream = mediaStream;
 
         const videoTrack = mediaStream.getVideoTracks()[0];
         const audioTrack = mediaStream.getAudioTracks()[0];
@@ -165,6 +171,7 @@ export function StreamHostController() {
           // would otherwise stay published with nobody left to unpublish it.
           if (cancelled) {
             room.localParticipant.unpublishTrack(lvt, true).catch(() => {});
+            capturedStream?.getTracks().forEach((track) => track.stop());
             return;
           }
           publishedRef.current.video = pub;
@@ -177,6 +184,7 @@ export function StreamHostController() {
           });
           if (cancelled) {
             room.localParticipant.unpublishTrack(lat, true).catch(() => {});
+            capturedStream?.getTracks().forEach((track) => track.stop());
             return;
           }
           publishedRef.current.audio = pub;
@@ -186,6 +194,12 @@ export function StreamHostController() {
         setDetail(sourceName);
       } catch (err: any) {
         if (!cancelled && err?.name !== 'AbortError') setError(err?.message ?? String(err));
+        // Clean up any partially published tracks and stop the captured media stream
+        const { video: vp, audio: ap } = publishedRef.current;
+        publishedRef.current = {};
+        if (vp?.track) room.localParticipant.unpublishTrack(vp.track, true).catch(() => {});
+        if (ap?.track) room.localParticipant.unpublishTrack(ap.track, true).catch(() => {});
+        capturedStream?.getTracks().forEach((track) => track.stop());
       }
     };
 
@@ -199,6 +213,7 @@ export function StreamHostController() {
       publishedRef.current = {};
       if (vp?.track) room.localParticipant.unpublishTrack(vp.track, true).catch(() => {});
       if (ap?.track) room.localParticipant.unpublishTrack(ap.track, true).catch(() => {});
+      capturedStream?.getTracks().forEach((track) => track.stop());
       try {
         video.pause();
         video.removeAttribute('src');
@@ -226,8 +241,11 @@ export function StreamHostController() {
   );
 }
 
-function waitForMetadata(video: HTMLVideoElement): Promise<void> {
+function waitForMetadata(video: HTMLVideoElement, signal?: AbortSignal): Promise<void> {
   if (video.readyState >= HTMLMediaElement.HAVE_METADATA) return Promise.resolve();
+  if (signal?.aborted) {
+    return Promise.reject(new DOMException('Metadata load aborted', 'AbortError'));
+  }
   return new Promise((resolve, reject) => {
     const onLoaded = () => {
       cleanup();
@@ -237,10 +255,16 @@ function waitForMetadata(video: HTMLVideoElement): Promise<void> {
       cleanup();
       reject(new Error('Could not open the torrent video stream.'));
     };
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException('Metadata load aborted', 'AbortError'));
+    };
     const cleanup = () => {
       video.removeEventListener('loadedmetadata', onLoaded);
       video.removeEventListener('error', onError);
+      signal?.removeEventListener('abort', onAbort);
     };
+    signal?.addEventListener('abort', onAbort, { once: true });
     video.addEventListener('loadedmetadata', onLoaded);
     video.addEventListener('error', onError);
   });

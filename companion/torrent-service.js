@@ -104,7 +104,10 @@ class TorrentService {
     this.active = active;
 
     client.on('error', (error) => {
-      if (this.active === active) this.sendError(socket, requestId, error);
+      if (this.active === active) {
+        this.sendError(socket, requestId, error);
+        this.operation = this.operation.then(() => this.stop(socket, requestId));
+      }
     });
     await listen(server, this.port);
     if (this.active !== active) return;
@@ -117,7 +120,10 @@ class TorrentService {
     );
     active.torrent = torrent;
     torrent.on('error', (error) => {
-      if (this.active === active) this.sendError(socket, requestId, error);
+      if (this.active === active) {
+        this.sendError(socket, requestId, error);
+        this.operation = this.operation.then(() => this.stop(socket, requestId));
+      }
     });
     torrent.on('noPeers', () => {
       if (this.active === active) {

@@ -98,6 +98,8 @@ export function CompanionRoomBridge() {
 
     const connect = () => {
       if (stopped || socket) return;
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = undefined;
       const roomName = room.name;
       const participantIdentity = room.localParticipant.identity;
       if (!roomName || !participantIdentity) return;

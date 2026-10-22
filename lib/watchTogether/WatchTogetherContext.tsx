@@ -52,60 +52,65 @@ export function WatchTogetherProvider({ children }: { children: React.ReactNode 
   const embedRef = React.useRef(embed);
   embedRef.current = embed;
 
-  const { send } = useDataChannel(WATCH_TOGETHER_TOPIC, (msg) => {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(decoder.decode(msg.payload));
-    } catch {
-      return;
-    }
-    if (!isWatchSyncMessage(parsed)) return;
-    const fromIdentity = msg.from?.identity;
-    if (!fromIdentity) return;
+  const onDataMessage = React.useCallback(
+    (msg: { payload: Uint8Array; from?: { identity: string } }) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(decoder.decode(msg.payload));
+      } catch {
+        return;
+      }
+      if (!isWatchSyncMessage(parsed)) return;
+      const fromIdentity = msg.from?.identity;
+      if (!fromIdentity) return;
 
-    if (parsed.type === 'start-embed') {
-      if (parsed.hostIdentity !== fromIdentity) return;
-      const current = embedRef.current;
-      if (current.active && current.hostIdentity !== fromIdentity) return;
-      lastHeartbeatRef.current = Date.now();
-      setStream({ active: false });
-      setStreamPlayback({ active: false });
-      setEmbed({
-        active: true,
-        kind: parsed.kind,
-        src: parsed.src,
-        hostIdentity: parsed.hostIdentity,
-        isHost: fromIdentity === localParticipant.identity,
-      });
-    } else if (parsed.type === 'heartbeat') {
-      if (parsed.hostIdentity !== fromIdentity) return;
-      const current = embedRef.current;
-      if (current.active && current.hostIdentity !== fromIdentity) return;
-      lastHeartbeatRef.current = Date.now();
-      if (!current.active) {
+      if (parsed.type === 'start-embed') {
+        if (parsed.hostIdentity !== fromIdentity) return;
+        const current = embedRef.current;
+        if (current.active && current.hostIdentity !== fromIdentity) return;
+        lastHeartbeatRef.current = Date.now();
         setStream({ active: false });
         setStreamPlayback({ active: false });
-      }
-      setEmbed((prev) => {
-        if (prev.active) return prev;
-        return {
+        setEmbed({
           active: true,
           kind: parsed.kind,
           src: parsed.src,
           hostIdentity: parsed.hostIdentity,
           isHost: fromIdentity === localParticipant.identity,
-        };
-      });
-    } else {
-      const current = embedRef.current;
-      if (!current.active || current.hostIdentity !== fromIdentity) return;
-    }
+        });
+      } else if (parsed.type === 'heartbeat') {
+        if (parsed.hostIdentity !== fromIdentity) return;
+        const current = embedRef.current;
+        if (current.active && current.hostIdentity !== fromIdentity) return;
+        lastHeartbeatRef.current = Date.now();
+        if (!current.active) {
+          setStream({ active: false });
+          setStreamPlayback({ active: false });
+        }
+        setEmbed((prev) => {
+          if (prev.active) return prev;
+          return {
+            active: true,
+            kind: parsed.kind,
+            src: parsed.src,
+            hostIdentity: parsed.hostIdentity,
+            isHost: fromIdentity === localParticipant.identity,
+          };
+        });
+      } else {
+        const current = embedRef.current;
+        if (!current.active || current.hostIdentity !== fromIdentity) return;
+      }
 
-    if (parsed.type === 'stop') {
-      setEmbed({ active: false });
-    }
-    listenersRef.current.forEach((listener) => listener(parsed));
-  });
+      if (parsed.type === 'stop') {
+        setEmbed({ active: false });
+      }
+      listenersRef.current.forEach((listener) => listener(parsed));
+    },
+    [localParticipant.identity],
+  );
+
+  const { send } = useDataChannel(WATCH_TOGETHER_TOPIC, onDataMessage);
 
   // If the host vanishes without sending "stop" (tab crash, network drop),
   // viewers would be stuck on a frozen embed — drop it once heartbeats stop.

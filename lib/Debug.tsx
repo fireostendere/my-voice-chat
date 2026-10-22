@@ -48,6 +48,7 @@ export const useDebugMode = ({ logLevel }: { logLevel?: LogLevel }) => {
     return () => {
       // @ts-expect-error
       window.__lk_room = undefined;
+      setLogExtension(() => {});
     };
   }, [room, logLevel]);
 };
@@ -65,24 +66,29 @@ export const DebugMode = ({ logLevel }: { logLevel?: LogLevel }) => {
   useDebugMode({ logLevel });
 
   React.useEffect(() => {
-    if (window) {
-      const unsubscribe = tinykeys(window, {
-        'Shift+D': () => {
-          console.log('setting open');
-          setIsOpen((open) => !open);
-        },
-      });
+    if (typeof window === 'undefined') return;
+    const unsubscribe = tinykeys(window, {
+      'Shift+D': () => {
+        setIsOpen((open) => !open);
+      },
+    });
 
-      // timer to re-render
-      const interval = setInterval(() => {
-        setRender({});
-      }, 1000);
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
-      return () => {
-        unsubscribe();
-        clearInterval(interval);
-      };
-    }
+  React.useEffect(() => {
+    if (!isOpen) return;
+
+    // timer to re-render stats only while the overlay is visible
+    const interval = setInterval(() => {
+      setRender({});
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+    };
   }, [isOpen]);
 
   if (typeof window === 'undefined' || !isOpen) {

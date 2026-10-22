@@ -50,15 +50,21 @@ export function CameraSettings() {
   };
 
   React.useEffect(() => {
-    if (isLocalTrack(cameraTrack?.track)) {
+    const track = cameraTrack?.track;
+    if (isLocalTrack(track)) {
       if (backgroundType === 'blur') {
-        cameraTrack.track?.setProcessor(BackgroundBlur());
+        track.setProcessor(BackgroundBlur());
       } else if (backgroundType === 'image' && virtualBackgroundImagePath) {
-        cameraTrack.track?.setProcessor(VirtualBackground(virtualBackgroundImagePath));
+        track.setProcessor(VirtualBackground(virtualBackgroundImagePath));
       } else {
-        cameraTrack.track?.stopProcessor();
+        track.stopProcessor();
       }
     }
+    return () => {
+      if (isLocalTrack(track)) {
+        track.stopProcessor().catch(() => {});
+      }
+    };
   }, [cameraTrack, backgroundType, virtualBackgroundImagePath]);
 
   return (

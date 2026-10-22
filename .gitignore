@@ -49,3 +49,5 @@ yarn-error.log*
 
 # easyeda MCP local cache (not part of this project)
 /.easyeda-mcp-pro/
+
+.codex/
